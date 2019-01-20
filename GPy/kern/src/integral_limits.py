@@ -8,7 +8,7 @@ from ...core.parameterization import Param
 from paramz.transformations import Logexp
 
 
-class Integral_Limits(Kern): 
+class Integral_Limits(Kern):
     """
     Integral kernel. This kernel allows 1d histogram or binned data to be modelled.
     The outputs are the counts in each bin. The inputs (on two dimensions) are the start and end points of each bin.
@@ -46,6 +46,7 @@ class Integral_Limits(Kern):
             self.lengthscale.gradient = np.sum(dK_dl * dL_dK)
             self.variances.gradient = np.sum(dK_dv * dL_dK)
         else:     #we're finding dK_xf/Dtheta
+            import pdb; pdb.set_trace()
             raise NotImplementedError("Currently this function only handles finding the gradient of a single vector of inputs (X) not a pair of vectors (X and X2)")
 
     #useful little function to help calculate the covariances.
@@ -53,6 +54,7 @@ class Integral_Limits(Kern):
         return 1.0 * z * np.sqrt(math.pi) * math.erf(z) + np.exp(-(z**2))
 
     def k_xx(self,t,tprime,s,sprime,l):
+        "This is k_ff"
         """Covariance between observed values.
 
         s and t are one domain of the integral (i.e. the integral between s and t)
@@ -64,10 +66,12 @@ class Integral_Limits(Kern):
         return 0.5 * (l**2) * ( self.g((t-sprime)/l) + self.g((tprime-s)/l) - self.g((t - tprime)/l) - self.g((s-sprime)/l))
 
     def k_ff(self,t,tprime,l):
+        "k_uu"
         """Doesn't need s or sprime as we're looking at the 'derivatives', so no domains over which to integrate are required"""
         return np.exp(-((t-tprime)**2)/(l**2)) #rbf
 
     def k_xf(self,t,tprime,s,l):
+        "This is actually is k_fu"
         """Covariance between the gradient (latent value) and the actual (observed) value.
 
         Note that sprime isn't actually used in this expression, presumably because the 'primes' are the gradient (latent) values which don't
@@ -86,30 +90,65 @@ class Integral_Limits(Kern):
          are going to be both from the OUTPUT FUNCTION.
          - if X2 is not none, then we know that the items being compared are from two different
          sets (the OUTPUT FUNCTION and the LATENT FUNCTION).
-        
+
         If we want the covariance between values of the LATENT FUNCTION, we take advantage of
         the fact that we only need that when we do prediction, and this only calls Kdiag (not K).
-        So the covariance between LATENT FUNCTIONS is available from Kdiag.        
+        So the covariance between LATENT FUNCTIONS is available from Kdiag.
         """
+        print("X.shape", X.shape)
+        print("this is K, why it comes here!!!!!")
         if X2 is None:
+            "This is actually k_ff"
             K_xx = np.zeros([X.shape[0],X.shape[0]])
             for i,x in enumerate(X):
                 for j,x2 in enumerate(X):
                     K_xx[i,j] = self.k_xx(x[0],x2[0],x[1],x2[1],self.lengthscale[0])
             return K_xx * self.variances[0]
         else:
+            "This is k_fu"
             K_xf = np.zeros([X.shape[0],X2.shape[0]])
             for i,x in enumerate(X):
                 for j,x2 in enumerate(X2):
                     K_xf[i,j] = self.k_xf(x[0],x2[0],x[1],self.lengthscale[0]) #x2[1] unused, see k_xf docstring for explanation.
             return K_xf * self.variances[0]
 
-    def Kdiag(self, X):
+    #  This is added by Fariba!
+    def Kff(self, X):
+        "This is actually k_uu"
+        "Exact smae thing is written inside Kdiag!"
+        "I have no idea why it is inside the Kdiag!!!!! also there is no diag, it is full matrix"
+        "Faribaaaaaaaaaaaaaaa"
         """I've used the fact that we call this method during prediction (instead of K). When we
         do prediction we want to know the covariance between LATENT FUNCTIONS (K_ff) (as that's probably
         what the user wants).
         $K_{ff}^{post} = K_{ff} - K_{fx} K_{xx}^{-1} K_{xf}$"""
+        print ("X.shape inside Kdiag for kff!!!:", X.shape)
         K_ff = np.zeros(X.shape[0])
         for i,x in enumerate(X):
             K_ff[i] = self.k_ff(x[0],x[0],self.lengthscale[0])
         return K_ff * self.variances[0]
+
+    # Ask Mike what he means!!!!!!
+    def Kdiag(self, X):
+        "This is actually k_uu"
+        "I have no idea why it is inside the Kdiag!!!!! also there is no diag, it is full matrix"
+        "Faribaaaaaaaaaaaaaaa"
+        """I've used the fact that we call this method during prediction (instead of K). When we
+        do prediction we want to know the covariance between LATENT FUNCTIONS (K_ff) (as that's probably
+        what the user wants).
+        $K_{ff}^{post} = K_{ff} - K_{fx} K_{xx}^{-1} K_{xf}$"""
+        print ("X.shape inside Kdiag for kff!!!:", X.shape)
+        K_ff = np.zeros(X.shape[0])
+        for i,x in enumerate(X):
+            K_ff[i] = self.k_ff(x[0],x[0],self.lengthscale[0])
+        return K_ff * self.variances[0]
+
+    def Kdiag_fariba(self, X):
+        "This is actually k_ff"
+        if X2 is None:
+            "This is actually k_ff"
+            K_xx = np.zeros([X.shape[0],X.shape[0]])
+            for i,x in enumerate(X):
+                for j,x2 in enumerate(X):
+                    K_xx[i,j] = self.k_xx(x[0],x2[0],x[1],x2[1],self.lengthscale[0])
+            return np.diag(K_xx * self.variances[0])

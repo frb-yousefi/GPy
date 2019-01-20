@@ -6,6 +6,7 @@ from .kern import Kern
 from ...core.parameterization import Param
 from paramz.transformations import Logexp
 import math
+from numba import jit
 
 class Multidimensional_Integral_Limits(Kern): #todo do I need to inherit from Stationary
     """
@@ -26,8 +27,9 @@ class Multidimensional_Integral_Limits(Kern): #todo do I need to inherit from St
 
         self.lengthscale = Param('lengthscale', lengthscale, Logexp()) #Logexp - transforms to allow positive only values...
         self.variances = Param('variances', variances, Logexp()) #and here.
+        
         self.link_parameters(self.variances, self.lengthscale) #this just takes a list of parameters we need to optimise.
-
+        
     def h(self, z):
         return 0.5 * z * np.sqrt(math.pi) * math.erf(z) + np.exp(-(z**2))
 
@@ -36,24 +38,28 @@ class Multidimensional_Integral_Limits(Kern): #todo do I need to inherit from St
 
     def update_gradients_full(self, dL_dK, X, X2=None):
         if X2 is None:  #we're finding dK_xx/dTheta
-            dK_dl_term = np.zeros([X.shape[0],X.shape[0],self.lengthscale.shape[0]])
-            k_term = np.zeros([X.shape[0],X.shape[0],self.lengthscale.shape[0]])
-            dK_dl = np.zeros([X.shape[0],X.shape[0],self.lengthscale.shape[0]])
-            dK_dv = np.zeros([X.shape[0],X.shape[0]])
-            for il,l in enumerate(self.lengthscale):
-                idx = il*2
-                for i,x in enumerate(X):
-                    for j,x2 in enumerate(X):
-                        dK_dl_term[i,j,il] = self.dk_dl(x[idx],x2[idx],x[idx+1],x2[idx+1],l)
-                        k_term[i,j,il] = self.k_xx(x[idx],x2[idx],x[idx+1],x2[idx+1],l)
-            for il,l in enumerate(self.lengthscale):
-                dK_dl = self.variances[0] * dK_dl_term[:,:,il]
-                for jl, l in enumerate(self.lengthscale):
-                    if jl!=il:
-                        dK_dl *= k_term[:,:,jl]
-                self.lengthscale.gradient[il] = np.sum(dK_dl * dL_dK)
-            dK_dv = self.calc_K_xx_wo_variance(X) #the gradient wrt the variance is k_xx.
-            self.variances.gradient = np.sum(dK_dv * dL_dK)
+            lengthscale_gradients, variances_gradient = mrt_update_gradients_full_X2_none(dL_dK, X, np.array(self.lengthscale), np.array(self.variances))
+            for il,_ in enumerate(self.lengthscale):
+                self.lengthscale.gradient[il] = lengthscale_gradients[il]
+            self.variances.gradient = variances_gradient
+            # dK_dl_term = np.zeros([X.shape[0],X.shape[0],self.lengthscale.shape[0]])
+            # k_term = np.zeros([X.shape[0],X.shape[0],self.lengthscale.shape[0]])
+            # dK_dl = np.zeros([X.shape[0],X.shape[0],self.lengthscale.shape[0]])
+            # dK_dv = np.zeros([X.shape[0],X.shape[0]])
+            # for il,l in enumerate(self.lengthscale):
+            #     idx = il*2
+            #     for i,x in enumerate(X):
+            #         for j,x2 in enumerate(X):
+            #             dK_dl_term[i,j,il] = self.dk_dl(x[idx],x2[idx],x[idx+1],x2[idx+1],l)
+            #             k_term[i,j,il] = self.k_xx(x[idx],x2[idx],x[idx+1],x2[idx+1],l)
+            # for il,l in enumerate(self.lengthscale):
+            #     dK_dl = self.variances[0] * dK_dl_term[:,:,il]
+            #     for jl, l in enumerate(self.lengthscale):
+            #         if jl!=il:
+            #             dK_dl *= k_term[:,:,jl]
+            #     self.lengthscale.gradient[il] = np.sum(dK_dl * dL_dK)
+            # dK_dv = self.calc_K_xx_wo_variance(X) #the gradient wrt the variance is k_xx.
+            # self.variances.gradient = np.sum(dK_dv * dL_dK)
         else:     #we're finding dK_xf/Dtheta
             raise NotImplementedError("Currently this function only handles finding the gradient of a single vector of inputs (X) not a pair of vectors (X and X2)")
 
@@ -87,26 +93,28 @@ class Multidimensional_Integral_Limits(Kern): #todo do I need to inherit from St
 
     def calc_K_xx_wo_variance(self,X):
         """Calculates K_xx without the variance term"""
-        K_xx = np.ones([X.shape[0],X.shape[0]]) #ones now as a product occurs over each dimension
-        for i,x in enumerate(X):
-            for j,x2 in enumerate(X):
-                for il,l in enumerate(self.lengthscale):
-                    idx = il*2 #each pair of input dimensions describe the limits on one actual dimension in the data
-                    K_xx[i,j] *= self.k_xx(x[idx],x2[idx],x[idx+1],x2[idx+1],l)
-        return K_xx
+        # K_xx = np.ones([X.shape[0],X.shape[0]]) #ones now as a product occurs over each dimension
+        # for i,x in enumerate(X):
+        #     for j,x2 in enumerate(X):
+        #         for il,l in enumerate(self.lengthscale):
+        #             idx = il*2 #each pair of input dimensions describe the limits on one actual dimension in the data
+        #             K_xx[i,j] *= self.k_xx(x[idx],x2[idx],x[idx+1],x2[idx+1],l)
+        # return K_xx
+        return mrt_calc_K_xx_wo_variance(X, np.array(self.lengthscale))
 
     def K(self, X, X2=None):
         if X2 is None: #X vs X
             K_xx = self.calc_K_xx_wo_variance(X)
             return K_xx * self.variances[0]
         else: #X vs X2
-            K_xf = np.ones([X.shape[0],X2.shape[0]])
-            for i,x in enumerate(X):
-                for j,x2 in enumerate(X2):
-                    for il,l in enumerate(self.lengthscale):
-                        idx = il*2
-                        K_xf[i,j] *= self.k_xf(x[idx],x2[idx],x[idx+1],l)
-            return K_xf * self.variances[0]
+            # K_xf = np.ones([X.shape[0],X2.shape[0]])
+            # for i,x in enumerate(X):
+            #     for j,x2 in enumerate(X2):
+            #         for il,l in enumerate(self.lengthscale):
+            #             idx = il*2
+            #             K_xf[i,j] *= self.k_xf(x[idx],x2[idx],x[idx+1],l)
+            # return K_xf * self.variances[0]
+            return mrt_K(X, X2, np.array(self.lengthscale), np.array(self.variances))
 
     def Kdiag(self, X):
         """I've used the fact that we call this method for K_ff when finding the covariance as a hack so
@@ -118,3 +126,87 @@ class Multidimensional_Integral_Limits(Kern): #todo do I need to inherit from St
                 idx = il*2
                 K_ff[i] *= self.k_ff(x[idx],x[idx],l)
         return K_ff * self.variances[0]
+
+
+@jit(nopython=True)
+def mrt_calc_K_xx_wo_variance(X, lengthscale):
+    K_xx = np.ones((X.shape[0],X.shape[0])) #ones now as a product occurs over each dimension
+    for i in range(X.shape[0]):
+        x = X[i]
+        for j in range(X.shape[0]):
+            x2 = X[j]
+            for il in range(lengthscale.shape[0]):
+                l = lengthscale[il]
+                idx = int(il*2) #each pair of input dimensions describe the limits on one actual dimension in the data
+                K_xx[i,j] *= k_xx(x[idx],x2[idx],x[idx+1],x2[idx+1],l)
+                il += 1
+            j += 1
+        i += 1
+    return K_xx
+
+@jit(nopython=True)
+def mrt_K(X, X2, lengthscale, variances):
+    K_xf = np.ones((X.shape[0],X2.shape[0]))
+    for i in range(X.shape[0]):
+        x = X[i]
+        for j in range(X2.shape[0]):
+            x2 = X2[j]
+            for il in range(lengthscale.shape[0]):
+                l = lengthscale[il]
+                idx = il*2
+                K_xf[i,j] *= k_xf(x[idx],x2[idx],x[idx+1],l)
+    return K_xf * variances[0]
+
+@jit(nopython=True)
+def k_xx(t, tprime, s, sprime, l):
+    return 0.5 * (l**2) * ( g((t-sprime)/l) + g((tprime-s)/l) - g((t - tprime)/l) - g((s-sprime)/l))
+
+@jit(nopython=True)
+def g(z):
+    return 1.0 * z * np.sqrt(math.pi) * math.erf(z) + np.exp(-(z**2))
+
+@jit(nopython=True)
+def k_xf(t, tprime, s, l):
+    """Covariance between the gradient (latent value) and the actual (observed) value.
+
+    Note that sprime isn't actually used in this expression, presumably because the 'primes' are the gradient (latent) values which don't
+    involve an integration, and thus there is no domain over which they're integrated, just a single value that we want."""
+    return 0.5 * np.sqrt(math.pi) * l * (math.erf((t-tprime)/l) + math.erf((tprime-s)/l))
+
+
+@jit(nopython=True)    
+def h(z):
+    return 0.5 * z * np.sqrt(math.pi) * math.erf(z) + np.exp(-(z**2))
+
+@jit(nopython=True)
+def dk_dl(t, tprime, s, sprime, l): #derivative of the kernel wrt lengthscale
+    return l * (h((t-sprime)/l) - h((t - tprime)/l) + h((tprime-s)/l) - h((s-sprime)/l))
+
+@jit(nopython=True)
+def mrt_update_gradients_full_X2_none(dL_dK, X, lengthscale, variances):
+    dK_dl_term = np.zeros((X.shape[0],X.shape[0],lengthscale.shape[0]))
+    k_term = np.zeros((X.shape[0],X.shape[0],lengthscale.shape[0]))
+    dK_dl = np.zeros((X.shape[0],X.shape[0],lengthscale.shape[0]))
+    dK_dv = np.zeros((X.shape[0],X.shape[0]))
+    for il in range(lengthscale.shape[0]):
+        l = lengthscale[il]
+        idx = il*2
+        for i in range(X.shape[0]):
+            x = X[i]
+            for j in range(X.shape[0]):
+                x2 = X[j]
+                dK_dl_term[i,j,il] = dk_dl(x[idx],x2[idx],x[idx+1],x2[idx+1],l)
+                k_term[i,j,il] = k_xx(x[idx],x2[idx],x[idx+1],x2[idx+1],l)
+          
+    lengthscale_gradients = np.zeros((lengthscale.shape[0]))
+    for il in range(lengthscale.shape[0]):
+        l = lengthscale[il]
+        dK_dl_new = variances[0] * dK_dl_term[:,:,il]
+        for jl in range(lengthscale.shape[0]):
+            l = lengthscale[jl]
+            if jl!=il:
+                dK_dl_new *= k_term[:,:,jl]
+        lengthscale_gradients[il] = np.sum(dK_dl_new * dL_dK)
+    variances_gradient = np.sum(mrt_calc_K_xx_wo_variance(X, lengthscale) * dL_dK)
+    return lengthscale_gradients, variances_gradient
+

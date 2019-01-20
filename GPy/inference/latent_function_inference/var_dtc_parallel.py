@@ -72,7 +72,7 @@ class VarDTC_minibatch(LatentFunctionInference):
     def gatherPsiStat(self, kern, X, Z, Y, beta, uncertain_inputs):
 
         het_noise = beta.size > 1
-        
+
         assert beta.size == 1
 
         trYYT = self.get_trYYT(Y)
@@ -178,15 +178,15 @@ class VarDTC_minibatch(LatentFunctionInference):
         LLInv = dtrtri(LL)
         logdet_L = 2.*np.sum(np.log(np.diag(LL)))
         LmLLInv = LLInv.dot(LmInv)
-        
+
         b  = psi1Y_full.dot(LmLLInv.T)
         bbt = np.square(b).sum()
         v = b.dot(LmLLInv).T
         LLinvPsi1TYYTPsi1LLinvT = tdot(b.T)
-        
+
         tmp = -LLInv.T.dot(LLinvPsi1TYYTPsi1LLinvT+output_dim*np.eye(input_dim)).dot(LLInv)
         dL_dpsi2R = LmInv.T.dot(tmp+output_dim*np.eye(input_dim)).dot(LmInv)/2.
-        
+
         # Cache intermediate results
         self.midRes['dL_dpsi2R'] = dL_dpsi2R
         self.midRes['v'] = v
@@ -423,6 +423,7 @@ def update_gradients(model, mpi_comm=None):
     model.likelihood.update_gradients(dL_dthetaL)
 
 def update_gradients_sparsegp(model, mpi_comm=None):
+    import pdb; pdb.set_trace()
     if mpi_comm == None:
         Y = model.Y
         X = model.X
@@ -431,18 +432,18 @@ def update_gradients_sparsegp(model, mpi_comm=None):
         X = model.X[model.N_range[0]:model.N_range[1]]
 
     model._log_marginal_likelihood, dL_dKmm, model.posterior = model.inference_method.inference_likelihood(model.kern, X, model.Z, model.likelihood, Y)
-    
+
     het_noise = model.likelihood.variance.size > 1
-    
+
     if het_noise:
         dL_dthetaL = np.empty((model.Y.shape[0],))
     else:
         dL_dthetaL = np.float64(0.)
-    
+
     kern_grad = model.kern.gradient.copy()
     kern_grad[:] = 0.
     model.Z.gradient = 0.
-    
+
     isEnd = False
     while not isEnd:
         isEnd, n_range, grad_dict = model.inference_method.inference_minibatch(model.kern, X, model.Z, model.likelihood, Y)
@@ -453,19 +454,19 @@ def update_gradients_sparsegp(model, mpi_comm=None):
             X_slice = model.X[n_range[0]:n_range[1]]
         else:
             X_slice = model.X[model.N_range[0]+n_range[0]:model.N_range[0]+n_range[1]]
-                
+
         model.kern.update_gradients_diag(grad_dict['dL_dKdiag'], X_slice)
         kern_grad += model.kern.gradient
         model.kern.update_gradients_full(grad_dict['dL_dKnm'], X_slice, model.Z)
         kern_grad += model.kern.gradient
-            
+
         model.Z.gradient += model.kern.gradients_X(grad_dict['dL_dKnm'].T, model.Z, X_slice)
-                
+
         if het_noise:
             dL_dthetaL[n_range[0]:n_range[1]] = grad_dict['dL_dthetaL']
         else:
             dL_dthetaL += grad_dict['dL_dthetaL']
-    
+
     # Gather the gradients from multiple MPI nodes
     if mpi_comm != None:
         from mpi4py import MPI
