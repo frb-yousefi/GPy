@@ -46,8 +46,16 @@ class Integral_Limits(Kern):
             self.lengthscale.gradient = np.sum(dK_dl * dL_dK)
             self.variances.gradient = np.sum(dK_dv * dL_dK)
         else:     #we're finding dK_xf/Dtheta
-            import pdb; pdb.set_trace()
-            raise NotImplementedError("Currently this function only handles finding the gradient of a single vector of inputs (X) not a pair of vectors (X and X2)")
+            # import pdb; pdb.set_trace()
+            # raise NotImplementedError("Currently this function only handles finding the gradient of a single vector of inputs (X) not a pair of vectors (X and X2)")
+            dK_dl = np.zeros([X.shape[0],X2.shape[0]])
+            dK_dv = np.zeros([X.shape[0],X2.shape[0]])
+            for i,x in enumerate(X):
+                for j,x2 in enumerate(X2):
+                    dK_dl[i,j] = self.variances[0]*self.dk_dl(x[0],x2[0],x[1],x2[1],self.lengthscale[0])
+                    dK_dv[i,j] = self.k_xx(x[0],x2[0],x[1],x2[1],self.lengthscale[0])  #the gradient wrt the variance is k_xx.
+            self.lengthscale.gradient = np.sum(dK_dl * dL_dK)
+            self.variances.gradient = np.sum(dK_dv * dL_dK)
 
     #useful little function to help calculate the covariances.
     def g(self,z):
@@ -95,8 +103,8 @@ class Integral_Limits(Kern):
         the fact that we only need that when we do prediction, and this only calls Kdiag (not K).
         So the covariance between LATENT FUNCTIONS is available from Kdiag.
         """
-        print("X.shape", X.shape)
-        print("this is K, why it comes here!!!!!")
+        # print("X.shape", X.shape)
+        # print("this is Kxx, why it comes here!!!!!")
         if X2 is None:
             "This is actually k_ff"
             K_xx = np.zeros([X.shape[0],X.shape[0]])
@@ -122,7 +130,7 @@ class Integral_Limits(Kern):
         do prediction we want to know the covariance between LATENT FUNCTIONS (K_ff) (as that's probably
         what the user wants).
         $K_{ff}^{post} = K_{ff} - K_{fx} K_{xx}^{-1} K_{xf}$"""
-        print ("X.shape inside Kdiag for kff!!!:", X.shape)
+        # print ("X.shape inside Kdiag for kff!!!:", X.shape)
         K_ff = np.zeros(X.shape[0])
         for i,x in enumerate(X):
             K_ff[i] = self.k_ff(x[0],x[0],self.lengthscale[0])
@@ -137,7 +145,7 @@ class Integral_Limits(Kern):
         do prediction we want to know the covariance between LATENT FUNCTIONS (K_ff) (as that's probably
         what the user wants).
         $K_{ff}^{post} = K_{ff} - K_{fx} K_{xx}^{-1} K_{xf}$"""
-        print ("X.shape inside Kdiag for kff!!!:", X.shape)
+        # print ("X.shape inside Kdiag for kff!!!:", X.shape)
         K_ff = np.zeros(X.shape[0])
         for i,x in enumerate(X):
             K_ff[i] = self.k_ff(x[0],x[0],self.lengthscale[0])
@@ -145,10 +153,28 @@ class Integral_Limits(Kern):
 
     def Kdiag_fariba(self, X):
         "This is actually k_ff"
-        if X2 is None:
-            "This is actually k_ff"
-            K_xx = np.zeros([X.shape[0],X.shape[0]])
-            for i,x in enumerate(X):
-                for j,x2 in enumerate(X):
-                    K_xx[i,j] = self.k_xx(x[0],x2[0],x[1],x2[1],self.lengthscale[0])
-            return np.diag(K_xx * self.variances[0])
+        "This is actually k_ff"
+        K_xx = np.zeros([X.shape[0],X.shape[0]])
+        for i,x in enumerate(X):
+            for j,x2 in enumerate(X):
+                K_xx[i,j] = self.k_xx(x[0],x2[0],x[1],x2[1],self.lengthscale[0])
+        return np.diag(K_xx * self.variances[0])
+
+# --------------------------------------------------------------------------
+    def update_gradients_diag(self, dL_dKdiag, X):
+        # Dummy code; We added this!
+        # import pdb; pdb.set_trace()
+        """ update the gradients of all parameters when using only the diagonal elements of the covariance matrix"""
+        # raise NotImplementedError
+        self.variances.gradient = np.sum(dL_dKdiag)
+        self.lengthscale.gradient = 0.
+
+
+    def gradients_X(self, dL_dK, X, X2):
+        """
+        .. math::
+
+            \\frac{\partial L}{\partial X} = \\frac{\partial L}{\partial K}\\frac{\partial K}{\partial X}
+        """
+        # raise NotImplementedError
+        return X
