@@ -8,8 +8,8 @@ from ...core.parameterization import Param
 from paramz.transformations import Logexp
 
 
-# class Integral_Limits(Kern):
-class Integral_Limits(Stationary):
+class Integral_Limits(Kern):
+# class Integral_Limits(Stationary):
     """
     Integral kernel. This kernel allows 1d histogram or binned data to be modelled.
     The outputs are the counts in each bin. The inputs (on two dimensions) are the start and end points of each bin.
@@ -41,7 +41,7 @@ class Integral_Limits(Stationary):
         return math.erf(z) - (z * np.exp(-(z**2)))
 
     def dkfu_dl(self, t, tprime, s, l): #derivative of the kfu wrt lengthscale
-        return (np.sqrt(math.pi) / 2) * (self.hp((t - tprime) / l) + self.hp((tprime - s) / l)
+        return (np.sqrt(math.pi) / 2) * (self.hp((t - tprime) / l) + self.hp((tprime - s) / l))
 # ///////////////////////////end Fariba/////////////////////////////////////////////////////////
 
 # ///////////////////////////////////////start Fariba//////////////////////////////////////////////
@@ -56,7 +56,6 @@ class Integral_Limits(Stationary):
                     dK_dv[i,j] = self.k_xx(x[0],x2[0],x[1],x2[1],self.lengthscale[0])  #the gradient wrt the variance is k_xx.
             self.lengthscale.gradient = np.sum(dK_dl * dL_dK)
             self.variances.gradient = np.sum(dK_dv * dL_dK)
-
         else:     #we're finding dK_xf/Dtheta
             # import pdb; pdb.set_trace()
             # raise NotImplementedError("Currently this function only handles finding the gradient of a single vector of inputs (X) not a pair of vectors (X and X2)")
@@ -156,19 +155,21 @@ class Integral_Limits(Stationary):
 
     # Ask Mike what he means!!!!!!
     def Kdiag(self, X):
-        import pdb; pdb.set_trace()
         "This is actually k_uu"
         "I have no idea why it is inside the Kdiag!!!!! also there is no diag, it is full matrix"
-        "Faribaaaaaaaaaaaaaaa" "This is always one, is it a bug?"
+        "This is always one x[0],x[0], is it a bug?"
         """I've used the fact that we call this method during prediction (instead of K). When we
         do prediction we want to know the covariance between LATENT FUNCTIONS (K_ff) (as that's probably
         what the user wants).
         $K_{ff}^{post} = K_{ff} - K_{fx} K_{xx}^{-1} K_{xf}$"""
-        print ("X.shape inside Kdiag for kff which should be k_uu in fact, should fix this!!!:", X.shape)
+        print ("Z.shape k_uu in fact, should fix this!!!:", X.shape)
         K_ff = np.zeros(X.shape[0])
         for i,x in enumerate(X):
+            import pdb; pdb.set_trace()
+            print('x:', x)
             K_ff[i] = self.k_ff(x[0],x[0],self.lengthscale[0])
-        print ('K_ff', k_ff)
+        print ('K_ff', K_ff)
+        print('k_ff shape:', k_ff)
         return K_ff * self.variances[0]
 
 # ///////////////////////////////////////start Fariba//////////////////////////////////////////////
@@ -184,24 +185,24 @@ class Integral_Limits(Stationary):
 
 # --------------------------------------------------------------------------
 #  Souldn't we use this where RBF inherits from stationary and calculates k_uu
-    def K_of_r(self, r):
-        # This is K_uu
-        r = self._scaled_dist(X, X2)
-        return self.variance * np.exp(-0.5 * r**2)
+    # def K_of_r(self, r):
+    #     # This is K_uu
+    #     r = self._scaled_dist(X, X2)
+    #     return self.variance * np.exp(-0.5 * r**2)
 
-    def _scaled_dist(self, X, X2=None):
-        """
-        Efficiently compute the scaled distance, r.
-
-        ..math::
-            r = \sqrt( \sum_{q=1}^Q (x_q - x'q)^2/l_q^2 )
-
-        Note that if thre is only one lengthscale, l comes outside the sum. In
-        this case we compute the unscaled distance first (in a separate
-        function for caching) and divide by lengthscale afterwards
-
-        """
-        return self._unscaled_dist(X, X2)/self.lengthscale
+    # def _scaled_dist(self, X, X2=None):
+    #     """
+    #     Efficiently compute the scaled distance, r.
+    #
+    #     ..math::
+    #         r = \sqrt( \sum_{q=1}^Q (x_q - x'q)^2/l_q^2 )
+    #
+    #     Note that if thre is only one lengthscale, l comes outside the sum. In
+    #     this case we compute the unscaled distance first (in a separate
+    #     function for caching) and divide by lengthscale afterwards
+    #
+    #     """
+    #     return self._unscaled_dist(X, X2)/self.lengthscale
 
     # def dK_dr(self, r):
     #     return -r*self.K_of_r(r)
