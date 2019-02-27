@@ -261,7 +261,7 @@ class Integral_Limits(Kern):
         return (self.hp((t - tprime) / l) + self.hp((tprime - s) / l))
 
     def dkfu_dl(self, t, tprime, s, l): #derivative of the kfu wrt lengthscale
-        return (np.sqrt(2) * (self.hp((t - tprime) / np.sqrt(2)*l) + self.hp((tprime - s) / np.sqrt(2)*l))
+        return (np.sqrt(2) * (self.hp((t - tprime) / np.sqrt(2)*l) + self.hp((tprime - s) / np.sqrt(2)*l)))
 # ///////////////////////////end Fariba/////////////////////////////////////////////////////////
 
 # ///////////////////////////////////////start Fariba//////////////////////////////////////////////
@@ -348,9 +348,9 @@ class Integral_Limits(Kern):
 
 
 # -----------------------------------------------------------------
-"""
-Not used yet!
-"""
+    """
+    Not used yet!
+    """
     def _inv_dist(self, X, X2=None):
         """
         Compute the elementwise inverse of the distance matrix, expecpt on the

@@ -40,28 +40,8 @@ class Multidimensional_Integral_Limits(Kern):
             for il,_ in enumerate(self.lengthscale):
                 self.lengthscale.gradient[il] = lengthscale_gradients[il]
             self.variances.gradient = variances_gradient
-            # dK_dl_term = np.zeros([X.shape[0],X.shape[0],self.lengthscale.shape[0]])
-            # k_term = np.zeros([X.shape[0],X.shape[0],self.lengthscale.shape[0]])
-            # dK_dl = np.zeros([X.shape[0],X.shape[0],self.lengthscale.shape[0]])
-            # dK_dv = np.zeros([X.shape[0],X.shape[0]])
-            # for il,l in enumerate(self.lengthscale):
-            #     idx = il*2
-            #     for i,x in enumerate(X):
-            #         for j,x2 in enumerate(X):
-            #             dK_dl_term[i,j,il] = self.dk_dl(x[idx],x2[idx],x[idx+1],x2[idx+1],l)
-            #             k_term[i,j,il] = self.k_xx(x[idx],x2[idx],x[idx+1],x2[idx+1],l)
-            # for il,l in enumerate(self.lengthscale):
-            #     dK_dl = self.variances[0] * dK_dl_term[:,:,il]
-            #     for jl, l in enumerate(self.lengthscale):
-            #         if jl!=il:
-            #             dK_dl *= k_term[:,:,jl]
-            #     self.lengthscale.gradient[il] = np.sum(dK_dl * dL_dK)
-            # dK_dv = self.calc_K_xx_wo_variance(X) #the gradient wrt the variance is k_xx.
-            # self.variances.gradient = np.sum(dK_dv * dL_dK)
         else:     #we're finding dK_xf/Dtheta
             raise NotImplementedError("Currently this function only handles finding the gradient of a single vector of inputs (X) not a pair of vectors (X and X2)")
-
-
 
     #useful little function to help calculate the covariances.
     def g(self,z):
@@ -78,16 +58,16 @@ class Multidimensional_Integral_Limits(Kern):
         Note: We've not multiplied by the variance, this is done in K."""
         return 0.5 * (l**2) * ( self.g((t-sprime)/l) + self.g((tprime-s)/l) - self.g((t - tprime)/l) - self.g((s-sprime)/l))
 
-    def k_ff(self,t,tprime,l):
-        """Doesn't need s or sprime as we're looking at the 'derivatives', so no domains over which to integrate are required"""
-        return np.exp(-((t-tprime)**2)/(l**2)) #rbf
+    # def k_ff(self,t,tprime,l):
+    #     """Doesn't need s or sprime as we're looking at the 'derivatives', so no domains over which to integrate are required"""
+    #     return np.exp(-((t-tprime)**2)/(l**2)) #rbf
 
-    def k_xf(self,t,tprime,s,l):
-        """Covariance between the gradient (latent value) and the actual (observed) value.
+    # def k_xf(self,t,tprime,s,l):
+    #     """Covariance between the gradient (latent value) and the actual (observed) value.
 
-        Note that sprime isn't actually used in this expression, presumably because the 'primes' are the gradient (latent) values which don't
-        involve an integration, and thus there is no domain over which they're integrated, just a single value that we want."""
-        return 0.5 * np.sqrt(math.pi) * l * (math.erf((t-tprime)/l) + math.erf((tprime-s)/l))
+    #     Note that sprime isn't actually used in this expression, presumably because the 'primes' are the gradient (latent) values which don't
+    #     involve an integration, and thus there is no domain over which they're integrated, just a single value that we want."""
+    #     return 0.5 * np.sqrt(math.pi) * l * (math.erf((t-tprime)/l) + math.erf((tprime-s)/l))
 
     def calc_K_xx_wo_variance(self,X):
         """Calculates K_xx without the variance term"""

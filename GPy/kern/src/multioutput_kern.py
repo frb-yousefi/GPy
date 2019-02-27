@@ -83,6 +83,16 @@ class MultioutputKern(CombinationKernel):
         slices2 = index_to_slices(X2[:,self.index_dim])
         target =  np.zeros((X.shape[0], X2.shape[0]))
         [[[[ target.__setitem__((slices[i][k],slices2[j][l]), self.covariance[i][j]['K'](X[slices[i][k],:],X2[slices2[j][l],:])) for k in range( len(slices[i]))] for l in range(len(slices2[j])) ] for i in range(len(slices))] for j in range(len(slices2))]  
+
+        # for j in range(len(slices2)):
+        #     for i in range(len(slices)):
+        #         for l in range(len(slices2[j])):
+        #             for k in range(len(slices[i])):
+        #                 target.__setitem__((slices[i][k],slices2[j][l]), self.covariance[i][j]['K'](X[slices[i][k],:],X2[slices2[j][l],:]))
+
+
+
+        [[[[ target.__setitem__((slices[i][k],slices2[j][l]), self.covariance[i][j]['K'](X[slices[i][k],:],X2[slices2[j][l],:])) for k in range( len(slices[i]))] for l in range(len(slices2[j])) ] for i in range(len(slices))] ]  
         return target
 
     @Cache_this(limit=3, ignore_args=())
