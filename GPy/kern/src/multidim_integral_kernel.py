@@ -9,6 +9,7 @@ import math
 
 class Multidimensional_Integral_Limits(Kern): #todo do I need to inherit from Stationary
     """
+    Fariba...
     Integral kernel, can include limits on each integral value. This kernel allows an n-dimensional
     histogram or binned data to be modelled. The outputs are the counts in each bin. The inputs
     are the start and end points of each bin: Pairs of inputs act as the limits on each bin. So
