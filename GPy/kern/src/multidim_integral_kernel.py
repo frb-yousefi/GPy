@@ -2,39 +2,35 @@
 
 from __future__ import division
 import numpy as np
-from .kern import Kern
-from ...core.parameterization import Param
+from GPy.kern import Kern
+from GPy.core.parameterization import Param
 from paramz.transformations import Logexp
 import math
 
-class Multidimensional_Integral_Limits(Kern): #todo do I need to inherit from Stationary
+class Mix_Integral(Kern):
     """
-    Fariba...
-    Integral kernel, can include limits on each integral value. This kernel allows an n-dimensional
-    histogram or binned data to be modelled. The outputs are the counts in each bin. The inputs
-    are the start and end points of each bin: Pairs of inputs act as the limits on each bin. So
-    inputs 4 and 5 provide the start and end values of each bin in the 3rd dimension.
-    The kernel's predictions are the latent function which might have generated those binned results.    
+      
     """
 
-    def __init__(self, input_dim, variances=None, lengthscale=None, ARD=False, active_dims=None, name='integral'):
-        super(Multidimensional_Integral_Limits, self).__init__(input_dim, active_dims, name)
+    def __init__(self, input_dim, variances=None, lengthscale=None, ARD=False, active_dims=None, name='mix_integral'):
+        super(Mix_Integral, self).__init__(input_dim, active_dims, name)
 
         if lengthscale is None:
             lengthscale = np.ones(1)
         else:
             lengthscale = np.asarray(lengthscale)
+            
+        assert len(lengthscale)==(input_dim-1)/2
 
         self.lengthscale = Param('lengthscale', lengthscale, Logexp()) #Logexp - transforms to allow positive only values...
         self.variances = Param('variances', variances, Logexp()) #and here.
         self.link_parameters(self.variances, self.lengthscale) #this just takes a list of parameters we need to optimise.
 
     #useful little function to help calculate the covariances.
-    def g(self,z):
+    def g(self, z):
         return 1.0 * z * np.sqrt(math.pi) * math.erf(z) + np.exp(-(z**2))
 
-    def k_ff(self,t,tprime,s,sprime,l):
-        "This is k_ff"
+    def k_ff(self, t, tprime, s, sprime, lengthscale):
         """Covariance between observed values.
 
         s and t are one domain of the integral (i.e. the integral between s and t)
@@ -43,76 +39,111 @@ class Multidimensional_Integral_Limits(Kern): #todo do I need to inherit from St
         We're interested in how correlated these two integrals are.
 
         Note: We've not multiplied by the variance, this is done in K."""
-        return (l**2) * (self.g((t-sprime) / (np.sqrt(2)*l)) + self.g((tprime-s) / (np.sqrt(2)*l)) - self.g((t - tprime) / (np.sqrt(2)*l)) - self.g((s-sprime) / (np.sqrt(2)*l)))
-
-    def calc_K_ff_no_variance(self,X, X2):
+     #######   l = lengthscale * np.sqrt(2)###TO REINSTATE
+        l = lengthscale
+        return 0.5 * (l**2) * ( self.g((t - sprime) / l) + self.g((tprime - s) / l) - self.g((t - tprime) / l) - self.g((s - sprime) / l))
+    
+    def calc_K_ff_wo_variance(self, X, X2):
         """Calculates K_xx without the variance term"""
         K_ff = np.ones([X.shape[0], X2.shape[0]]) #ones now as a product occurs over each dimension
         for i,x in enumerate(X):
             for j,x2 in enumerate(X2):
                 for il,l in enumerate(self.lengthscale):
                     idx = il*2 #each pair of input dimensions describe the limits on one actual dimension in the data
-                    K_ff[i,j] *= self.k_xx(x[idx], x2[idx], x[idx+1], x2[idx+1], l)
+                    K_ff[i,j] *= self.k(x, x2, idx, l)
         return K_ff
 
-    def K(self, X, X2=None):
-        """Note: We have a latent function and an output function. We want to be able to find:
-          - the covariance between values of the output function
-          - the covariance between values of the latent function
-          - the "cross covariance" between values of the output function and the latent function
-        This method is used by GPy to either get the covariance between the outputs (K_xx) or
-        is used to get the cross covariance (between the latent function and the outputs (K_xf).
-        We take advantage of the places where this function is used:
-         - if X2 is none, then we know that the items being compared (to get the covariance for)
-         are going to be both from the OUTPUT FUNCTION.
-         - if X2 is not none, then we know that the items being compared are from two different
-         sets (the OUTPUT FUNCTION and the LATENT FUNCTION).
+    def k_uu(self, t, tprime, lengthscale):
+        """Doesn't need s or sprime as we're looking at the 'derivatives', so no domains over which to integrate are required"""        
+     #######   l = lengthscale * np.sqrt(2)###TO REINSTATE
+        l = lengthscale
+        return np.exp(-((t-tprime)**2) / (l**2)) #rbf
 
-        If we want the covariance between values of the LATENT FUNCTION, we take advantage of
-        the fact that we only need that when we do prediction, and this only calls Kdiag (not K).
-        So the covariance between LATENT FUNCTIONS is available from Kdiag.
+    def k_fu(self, t, tprime, s, lengthscale):
+        """Covariance between the gradient (latent value) and the actual (observed) value.
+
+        Note that sprime isn't actually used in this expression, presumably because the 'primes' are the gradient (latent) values which don't
+        involve an integration, and thus there is no domain over which they're integrated, just a single value that we want."""
+     #######   l = lengthscale * np.sqrt(2)###TO REINSTATE
+        l = lengthscale
+        return 0.5 * np.sqrt(math.pi) * l * (math.erf((t - tprime) / l) + math.erf((tprime - s) / l))
+
+    def k(self, x, x2, idx, l):
+        """Helper function to compute covariance in one dimension (idx) between a pair of points.
+        The last element in x and x2 specify if these are integrals (0) or latent values (1).
+        l = that dimension's lengthscale
         """
-        if X2 is None: 
-            X2 = X.copy()
-        K_ff = self.calc_K_xx_wo_variance(X, X2)
+        if (x[-1] == 0) and (x2[-1] == 0):
+            return self.k_ff(x[idx], x2[idx], x[idx+1], x2[idx+1], l)
+        if (x[-1] == 0) and (x2[-1] == 1):
+            return self.k_fu(x[idx], x2[idx], x[idx+1], l)
+        if (x[-1] == 1) and (x2[-1] == 0):
+            return self.k_fu(x2[idx], x[idx], x2[idx+1], l)                        
+        if (x[-1] == 1) and (x2[-1] == 1):
+            return self.k_uu(x[idx], x2[idx], l)
+        assert False, "Invalid choice of latent/integral parameter (set the last column of X to 0s and 1s to select this)"
+
+    def K(self, X, X2=None):
+        if X2 is None:
+            X2 = X
+        K_ff = self.calc_K_ff_wo_variance(X, X2)
         return K_ff * self.variances[0]
 
     def Kdiag(self, X):
-        # TODO: Not sure if it is correct or not!!!!
-        K_ff = np.ones(X.shape[0])
-        for i,x in enumerate(X):
-            for il,l in enumerate(self.lengthscale):
-                idx = il*2
-                K_ff[i] *= self.k_ff(x[idx], x[idx], x[idx+1], x[idx+1], l)
-        return K_ff * self.variances[0]
+        return np.diag(self.K(X))
+    
+    """
+    Maybe we could make Kdiag much more faster, because now every single time it should calculate K and get the diag!!
+    # TODO
+    """
+    # def Kdiag_Kuu(self, X):
+    #     return self.variance[0]*np.ones(X.shape[0])
 
+    """
+    Derivatives!
+    """
     def h(self, z):
         return 0.5 * z * np.sqrt(math.pi) * math.erf(z) + np.exp(-(z**2))
 
-    def dk_dl(self, t, tprime, s, sprime, l): #derivative of the kernel wrt lengthscale
-        return 2 * l * ( self.h((t-sprime) / (np.sqrt(2)*l)) - self.h((t - tprime) / (np.sqrt(2)*l)) + self.h((tprime-s) / (np.sqrt(2)*l)) - self.h((s-sprime) / (np.sqrt(2)*l)))
+    def hp(self, z):
+        return 0.5 * np.sqrt(math.pi) * math.erf(z) - z * np.exp(-(z**2))
 
-    def update_gradients_full(self, dL_dK, X, X2=None):
-        # K should be NxN
+    def dk_dl(self, t_type, tprime_type, t, tprime, s, sprime, l): #derivative of the kernel wrt lengthscale
+        #t and tprime are the two start locations
+        #s and sprime are the two end locations
+        #if t_type is 0 then t and s should be in the equation
+        #if tprime_type is 0 then tprime and sprime should be in the equation.
+        
+        if (t_type == 0) and (tprime_type == 0): #both integrals
+            return l * ( self.h((t - sprime) / l) - self.h((t - tprime) / l) + self.h((tprime - s) / l) - self.h((s - sprime) / l))
+        if (t_type == 0) and (tprime_type == 1): #integral vs latent 
+            return self.hp((t - tprime) / l) + self.hp((tprime - s) / l)
+        if (t_type == 1) and (tprime_type == 0): #integral vs latent 
+            return self.hp((tprime - t) / l) + self.hp((t - sprime) / l)
+            #swap: t<->tprime (t-s)->(tprime-sprime)
+        if (t_type == 1) and (tprime_type == 1): #both latent observations            
+            return 2 * (t - tprime)**2 / (l**3) * np.exp(-((t - tprime) / l)**2)
+        assert False, "Invalid choice of latent/integral parameter (set the last column of X to 0s and 1s to select this)"
+
+    def update_gradients_full(self, dL_dK, X, X2=None): 
         if X2 is None:  #we're finding dK_xx/dTheta
-            X2 = X.copy()
-        dKff_dl_term = np.zeros([X.shape[0], X2.shape[0], self.lengthscale.shape[0]])
-        k_term = np.zeros([X.shape[0], X2.shape[0], self.lengthscale.shape[0]])
-        dKff_dl = np.zeros([X.shape[0], X2.shape[0], self.lengthscale.shape[0]])
-        dKff_dv = np.zeros([X.shape[0], X2.shape[0]])
-        for il,l in enumerate(self.lengthscale):
-            idx = il*2
-            for i,x in enumerate(X):
-                for j,x2 in enumerate(X2):
-                    dKff_dl_term[i, j, il] = self.dkff_dl(x[idx], x2[idx], x[idx+1], x2[idx+1], l)
-                    k_term[i, j, il] = self.k_ff(x[idx], x2[idx], x[idx+1], x2[idx+1], l)
-        for il,l in enumerate(self.lengthscale):
-            dKff_dl = self.variances[0] * dKff_dl_term[:, :, il]
-            for jl, l in enumerate(self.lengthscale):
-                if jl != il:
-                    dKff_dl *= k_term[:, :, jl]
-                                          # It was dK_dl * dL_dK before!!!
-            self.lengthscale.gradient[il] = np.sum(dL_dK * dKff_dl)
-        dK_dv = self.calc_K_ff_no_variance(X) #the gradient wrt the variance is k_xx.
-        # self.variances.gradient = np.sum(dK_dv * dL_dK)
-        self.variances.gradient = np.sum(dL_dK * dK_dv)
+            dK_dl_term = np.zeros([X.shape[0],X.shape[0],self.lengthscale.shape[0]])
+            k_term = np.zeros([X.shape[0],X.shape[0],self.lengthscale.shape[0]])
+            dK_dl = np.zeros([X.shape[0],X.shape[0],self.lengthscale.shape[0]])
+            dK_dv = np.zeros([X.shape[0],X.shape[0]])
+            for il,l in enumerate(self.lengthscale):
+                idx = il*2
+                for i,x in enumerate(X):
+                    for j,x2 in enumerate(X):
+                        dK_dl_term[i,j,il] = self.dk_dl(x[-1],x2[-1],x[idx],x2[idx],x[idx+1],x2[idx+1],l)
+                        k_term[i,j,il] = self.k(x,x2,idx,l)
+            for il,l in enumerate(self.lengthscale):
+                dK_dl = self.variances[0] * dK_dl_term[:,:,il]
+                for jl, l in enumerate(self.lengthscale): ##@FARIBA Why do I have to comment this out??
+                    if jl!=il:
+                        dK_dl *= k_term[:,:,jl]
+                self.lengthscale.gradient[il] = np.sum(dK_dl * dL_dK)
+            dK_dv = self.calc_K_ff_wo_variance(X,X) #the gradient wrt the variance is k_xx.
+            self.variances.gradient = np.sum(dK_dv * dL_dK)
+        else:     #we're finding dK_xf/Dtheta
+            raise NotImplementedError("Currently this function only handles finding the gradient of a single vector of inputs (X) not a pair of vectors (X and X2)")
