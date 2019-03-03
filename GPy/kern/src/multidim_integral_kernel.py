@@ -9,10 +9,12 @@ import math
 
 class Mix_Integral(Kern):
     """
-      
+    Integral kernel. This kernel allows 1d histogram or binned data to be modelled.
+    The outputs are the counts in each bin. The inputs (on two dimensions) are the start and end points of each bin.
+    The kernel's predictions are the latent function which might have generated those binned results.
     """
-
-    def __init__(self, input_dim, variances=None, lengthscale=None, ARD=False, active_dims=None, name='mix_integral'):
+ 
+    def __init__(self, input_dim, variance=None, lengthscale=None, ARD=False, active_dims=None, name='mix_integral'):
         super(Mix_Integral, self).__init__(input_dim, active_dims, name)
 
         if lengthscale is None:
@@ -23,8 +25,8 @@ class Mix_Integral(Kern):
         assert len(lengthscale)==(input_dim-1)/2
 
         self.lengthscale = Param('lengthscale', lengthscale, Logexp()) #Logexp - transforms to allow positive only values...
-        self.variances = Param('variances', variances, Logexp()) #and here.
-        self.link_parameters(self.variances, self.lengthscale) #this just takes a list of parameters we need to optimise.
+        self.variance = Param('variance', variance, Logexp()) #and here.
+        self.link_parameters(self.variance, self.lengthscale) #this just takes a list of parameters we need to optimise.
 
     #useful little function to help calculate the covariances.
     def g(self, z):
@@ -43,15 +45,17 @@ class Mix_Integral(Kern):
         l = lengthscale
         return 0.5 * (l**2) * ( self.g((t - sprime) / l) + self.g((tprime - s) / l) - self.g((t - tprime) / l) - self.g((s - sprime) / l))
     
-    def calc_K_ff_wo_variance(self, X, X2):
+    def calc_K_wo_variance(self, X, X2):
         """Calculates K_xx without the variance term"""
-        K_ff = np.ones([X.shape[0], X2.shape[0]]) #ones now as a product occurs over each dimension
-        for i,x in enumerate(X):
-            for j,x2 in enumerate(X2):
+        # import pdb
+        # pdb.set_trace()
+        K_ = np.ones([X.shape[0], X2.shape[0]]) #ones now as a product occurs over each dimension
+        for i, x in enumerate(X):
+            for j, x2 in enumerate(X2):
                 for il,l in enumerate(self.lengthscale):
-                    idx = il*2 #each pair of input dimensions describe the limits on one actual dimension in the data
-                    K_ff[i,j] *= self.k(x, x2, idx, l)
-        return K_ff
+                    idx = il * 2 #each pair of input dimensions describe the limits on one actual dimension in the data
+                    K_[i,j] *= self.k(x, x2, idx, l)
+        return K_
 
     def k_uu(self, t, tprime, lengthscale):
         """Doesn't need s or sprime as we're looking at the 'derivatives', so no domains over which to integrate are required"""        
@@ -73,6 +77,11 @@ class Mix_Integral(Kern):
         The last element in x and x2 specify if these are integrals (0) or latent values (1).
         l = that dimension's lengthscale
         """
+        # import pdb
+        # pdb.set_trace()
+        # print('x:', x)
+        # print('x2:', x2)
+        # print('*********************')
         if (x[-1] == 0) and (x2[-1] == 0):
             return self.k_ff(x[idx], x2[idx], x[idx+1], x2[idx+1], l)
         if (x[-1] == 0) and (x2[-1] == 1):
@@ -86,8 +95,8 @@ class Mix_Integral(Kern):
     def K(self, X, X2=None):
         if X2 is None:
             X2 = X
-        K_ff = self.calc_K_ff_wo_variance(X, X2)
-        return K_ff * self.variances[0]
+        K = self.calc_K_wo_variance(X, X2)
+        return K * self.variance[0]
 
     def Kdiag(self, X):
         return np.diag(self.K(X))
@@ -122,28 +131,118 @@ class Mix_Integral(Kern):
             return self.hp((tprime - t) / l) + self.hp((t - sprime) / l)
             #swap: t<->tprime (t-s)->(tprime-sprime)
         if (t_type == 1) and (tprime_type == 1): #both latent observations            
-            return 2 * (t - tprime)**2 / (l**3) * np.exp(-((t - tprime) / l)**2)
+            return 2 * (t - tprime) **2 / (l ** 3) * np.exp(-((t - tprime) / l) ** 2)
         assert False, "Invalid choice of latent/integral parameter (set the last column of X to 0s and 1s to select this)"
 
     def update_gradients_full(self, dL_dK, X, X2=None): 
         if X2 is None:  #we're finding dK_xx/dTheta
-            dK_dl_term = np.zeros([X.shape[0],X.shape[0],self.lengthscale.shape[0]])
-            k_term = np.zeros([X.shape[0],X.shape[0],self.lengthscale.shape[0]])
-            dK_dl = np.zeros([X.shape[0],X.shape[0],self.lengthscale.shape[0]])
-            dK_dv = np.zeros([X.shape[0],X.shape[0]])
+            dK_dl_term = np.zeros([X.shape[0], X.shape[0], self.lengthscale.shape[0]])
+            k_term = np.zeros([X.shape[0], X.shape[0], self.lengthscale.shape[0]])
+            dK_dl = np.zeros([X.shape[0], X.shape[0], self.lengthscale.shape[0]])
+            dK_dv = np.zeros([X.shape[0], X.shape[0]])
+            for il, l in enumerate(self.lengthscale):
+                idx = il * 2
+                for i, x in enumerate(X):
+                    for j, x2 in enumerate(X):
+                        dK_dl_term[i, j, il] = self.dk_dl(x[-1],x2[-1],x[idx],x2[idx],x[idx+1],x2[idx+1], l)
+                        k_term[i, j, il] = self.k(x, x2, idx, l)
             for il,l in enumerate(self.lengthscale):
-                idx = il*2
-                for i,x in enumerate(X):
-                    for j,x2 in enumerate(X):
-                        dK_dl_term[i,j,il] = self.dk_dl(x[-1],x2[-1],x[idx],x2[idx],x[idx+1],x2[idx+1],l)
-                        k_term[i,j,il] = self.k(x,x2,idx,l)
-            for il,l in enumerate(self.lengthscale):
-                dK_dl = self.variances[0] * dK_dl_term[:,:,il]
+                dK_dl = self.variance[0] * dK_dl_term[:,:,il]
+                print('dK_dl:', dK_dl)
+                # It doesn't work without these three lines but I don't know what is that!!!
                 for jl, l in enumerate(self.lengthscale): ##@FARIBA Why do I have to comment this out??
-                    if jl!=il:
+                    if jl != il:
                         dK_dl *= k_term[:,:,jl]
-                self.lengthscale.gradient[il] = np.sum(dK_dl * dL_dK)
-            dK_dv = self.calc_K_ff_wo_variance(X,X) #the gradient wrt the variance is k_xx.
-            self.variances.gradient = np.sum(dK_dv * dL_dK)
+                        print('dK_dl inside!! what is this?', dK_dl)
+                self.lengthscale.gradient[il] = np.sum(dL_dK * dK_dl)
+            dK_dv = self.calc_K_wo_variance(X,X) #the gradient wrt the variance is k.
+            self.variance.gradient = np.sum(dL_dK * dK_dv)
         else:     #we're finding dK_xf/Dtheta
             raise NotImplementedError("Currently this function only handles finding the gradient of a single vector of inputs (X) not a pair of vectors (X and X2)")
+
+    def dk_dz(self, x, x2, t, tprime, s, lengthscale):
+        l = lengthscale
+        if (x[-1] == 0) and (x2[-1] == 1):
+            return -np.exp(-(t - tprime) ** 2 / l ** 2) + np.exp(-(tprime - s) ** 2 / l **2) 
+        if (x[-1] == 1) and (x2[-1] == 1):
+            return (t - tprime) / l**2 * np.exp(-(tprime - s)**2 / l ** 2)
+        assert False, 'KFU should have X and Z and KUU should have Z and Z!'
+
+
+    def gradients_X(self, dL_dK, X, X2):
+        """
+        .. math::
+
+            \\frac{\partial L}{\partial X} = \\frac{\partial L}{\partial K}\\frac{\partial K}{\partial X}
+        """
+        dKfu_dZ = self.variance[0] * dk_dz
+        dKuu_dZ = 2 * self.variance * dK_dz
+        if X2 == None:
+            dK_dZ = np.zeros([X.shape[0], X.shape[0]])
+
+        
+        raise NotImplementedError
+
+# ///////////////////////////////////////start Fariba//////////////////////////////////////////////
+    # def frb(self, l):
+    #     from functools import partial
+    #     from GPy.models import GradientChecker
+    #     f = partial(self.K)
+    #     df = partial(self.update_gradients_full)
+    #     grad = GradientChecker(f, df, l, 'l')
+    #     grad.checkgrad(verbose=1)
+# ///////////////////////////end Fariba/////////////////////////////////////////////////////////
+
+    # def gradients_X_diag(self, dL_dKdiag, X):
+    #     """
+    #     The diagonal of the derivative w.r.t. X
+    #     """
+    #     raise NotImplementedError
+
+    # def update_gradients_diag(self, dL_dKdiag, X):
+    #     """ update the gradients of all parameters when using only the diagonal elements of the covariance matrix"""
+    #     raise NotImplementedError
+
+
+# # -----------------------------------------------------------------
+# For RBF Kernel!
+#     """
+#     Not used yet!
+#     """
+#     def _inv_dist(self, X, X2=None):
+#         """
+#         Compute the elementwise inverse of the distance matrix, expecpt on the
+#         diagonal, where we return zero (the distance on the diagonal is zero).
+#         This term appears in derviatives.
+#         """
+#         dist = self._scaled_dist(X, X2).copy()
+#         return 1./np.where(dist != 0., dist, np.inf)
+
+#     def _gradients_X_pure(self, dL_dK, X, X2=None):
+#         invdist = self._inv_dist(X, X2)
+#         dL_dr = self.dK_dr_via_X(X, X2) * dL_dK
+#         tmp = invdist*dL_dr
+#         if X2 is None:
+#             tmp = tmp + tmp.T
+#             X2 = X
+
+#         #The high-memory numpy way:
+#         #d =  X[:, None, :] - X2[None, :, :]
+#         #grad = np.sum(tmp[:,:,None]*d,1)/self.lengthscale**2
+
+#         #the lower memory way with a loop
+#         grad = np.empty(X.shape, dtype=np.float64)
+#         for q in range(self.input_dim):
+#             np.sum(tmp*(X[:,q][:,None]-X2[:,q][None,:]), axis=1, out=grad[:,q])
+#         return grad/self.lengthscale**2
+
+#     def gradients_X(self, dL_dK, X, X2):
+#         """
+#         .. math::
+
+#             \\frac{\partial L}{\partial X} = \\frac{\partial L}{\partial K}\\frac{\partial K}{\partial X}
+#         """
+#         # raise NotImplementedError
+#         return self._gradients_X_pure(dL_dK, X, X2)
+
+#         # return X
