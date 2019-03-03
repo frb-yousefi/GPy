@@ -27,6 +27,8 @@ from .src.eq_ode2 import EQ_ODE2
 from .src.integral import Integral
 from .src.integral_limits import Integral_Limits
 from .src.multidimensional_integral_limits import Multidimensional_Integral_Limits
+from .src.mixed_kernel import Mix_Integral
+
 from .src.eq_ode1 import EQ_ODE1
 from .src.trunclinear import TruncLinear,TruncLinear_inf
 from .src.splitKern import SplitKern,DEtime
@@ -44,3 +46,4 @@ from .src.sde_static import sde_White, sde_Bias
 from .src.sde_stationary import sde_RBF,sde_Exponential,sde_RatQuad
 from .src.sde_brownian import sde_Brownian
 from .src.multioutput_kern import MultioutputKern
+from .src.multidim_integral_kernel import Mix_Integral
