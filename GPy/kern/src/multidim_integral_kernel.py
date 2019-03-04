@@ -206,7 +206,7 @@ class Mix_Integral(Kern):
 # ------------------------------------------------------------------------------------------------------------------------------
 
 @jit(nopython=True)
-def frb_calc_K_wo_variance(self, X, X2, lengthscale):
+def frb_calc_K_wo_variance(X, X2, lengthscale):
     """
     Calculates K without the variance term, it can be Kff, Kfu or Kuu based on the last dimension of the input
     """

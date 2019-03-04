@@ -127,7 +127,6 @@ class Multidimensional_Integral_Limits(Kern): #todo do I need to inherit from St
                 K_ff[i] *= self.k_ff(x[idx],x[idx],l)
         return K_ff * self.variances[0]
 
-
 @jit(nopython=True)
 def mrt_calc_K_xx_wo_variance(X, lengthscale):
     K_xx = np.ones((X.shape[0],X.shape[0])) #ones now as a product occurs over each dimension
@@ -172,7 +171,6 @@ def k_xf(t, tprime, s, l):
     Note that sprime isn't actually used in this expression, presumably because the 'primes' are the gradient (latent) values which don't
     involve an integration, and thus there is no domain over which they're integrated, just a single value that we want."""
     return 0.5 * np.sqrt(math.pi) * l * (math.erf((t-tprime)/l) + math.erf((tprime-s)/l))
-
 
 @jit(nopython=True)    
 def h(z):
