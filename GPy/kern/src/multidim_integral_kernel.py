@@ -32,11 +32,9 @@ class Mix_Integral_(Kern):
 
     #useful little function to help calculate the covariances.
     def g(self, z):
-        # pdb.set_trace()
         return 1.0 * z * np.sqrt(math.pi) * math.erf(z) + np.exp(-(z**2))
 
     def k_ff(self, t, tprime, s, sprime, lengthscale):
-        pdb.set_trace()
         """Covariance between observed values.
 
         s and t are one domain of the integral (i.e. the integral between s and t)
@@ -50,10 +48,7 @@ class Mix_Integral_(Kern):
         return 0.5 * (l**2) * ( self.g((t - sprime) / l) + self.g((tprime - s) / l) - self.g((t - tprime) / l) - self.g((s - sprime) / l))
     
     def calc_K_wo_variance(self, X, X2):
-        # pdb.set_trace()
         """Calculates K without the variance term, it can be Kff, Kfu or Kuu based on the last dimension of the input"""
-        # # import pdb
-        # # pdb.set_trace()
         # K_ = np.ones([X.shape[0], X2.shape[0]]) #ones now as a product occurs over each dimension
         # for i, x in enumerate(X):
         #     for j, x2 in enumerate(X2):
@@ -79,17 +74,10 @@ class Mix_Integral_(Kern):
         return 0.5 * np.sqrt(math.pi) * l * (math.erf((t - tprime) / l) + math.erf((tprime - s) / l))
 
     def k(self, x, x2, idx, l):
-        # pdb.set_trace()
-
         """Helper function to compute covariance in one dimension (idx) between a pair of points.
         The last element in x and x2 specify if these are integrals (0) or latent values (1).
         l = that dimension's lengthscale
         """
-        # import pdb
-        # pdb.set_trace()
-        # print('x:', x)
-        # print('x2:', x2)
-        # print('*********************')
         if (x[-1] == 0) and (x2[-1] == 0):
             return self.k_ff(x[idx], x2[idx], x[idx+1], x2[idx+1], l)
         if (x[-1] == 0) and (x2[-1] == 1):
@@ -101,7 +89,6 @@ class Mix_Integral_(Kern):
         assert False, "Invalid choice of latent/integral parameter (set the last column of X to 0s and 1s to select this)"
 
     def K(self, X, X2=None):
-        # pdb.set_trace()
         if X2 is None:
             X2 = X
         K = self.calc_K_wo_variance(X, X2)
@@ -226,9 +213,6 @@ def frb_calc_K_wo_variance(X, X2, lengthscale):
                 l = lengthscale[il]
                 idx = int(il*2) #each pair of input dimensions describe the limits on one actual dimension in the data
                 K_[i,j] *= k(x, x2, idx, l)
-        #         il += 1
-        #     j += 1
-        # i += 1
     return K_
 
 @jit(nopython=True)
@@ -246,7 +230,7 @@ def k(x, x2, idx, l):
 @jit(nopython=True)
 def k_ff(t, tprime, s, sprime, lengthscale):
     l = lengthscale
-    return 0.5 * (l**2) * (g((t - sprime) / l) + g((tprime - s) / l) - ((t - tprime) / l) - g((s - sprime) / l))
+    return 0.5 * (l**2) * (g((t - sprime) / l) + g((tprime - s) / l) - g((t - tprime) / l) - g((s - sprime) / l))
 
 @jit(nopython=True)
 def k_uu(t, tprime, lengthscale):
@@ -266,29 +250,25 @@ def g(z):
 def frb_update_gradients_full_X2_none(dL_dK, X, lengthscale, variance): 
     dK_dl_term = np.zeros((X.shape[0], X.shape[0], lengthscale.shape[0]))
     k_term = np.zeros((X.shape[0], X.shape[0], lengthscale.shape[0]))
-    dK_dl = np.zeros((X.shape[0], X.shape[0], lengthscale.shape[0]))
-    dK_dv = np.zeros((X.shape[0], X.shape[0]))
     for il in range(lengthscale.shape[0]):
         l = lengthscale[il]
-        idx = il * 2
+        idx = int(il * 2)
         for i in range(X.shape[0]):
             x = X[i]
             for j in range(X.shape[0]):
                 x2 = X[j]
-                dK_dl_term[i, j, il] = dk_dl(x[-1],x2[-1],x[idx],x2[idx],x[idx+1],x2[idx+1], l)
+                dK_dl_term[i, j, il] = dk_dl(x[-1], x2[-1], x[idx], x2[idx], x[idx+1], x2[idx+1], l)
                 k_term[i, j, il] = k(x, x2, idx, l)
 
     lengthscale_gradient = np.ones((lengthscale.shape[0]))
     for il in range(lengthscale.shape[0]):
         l = lengthscale[il]
         dK_dl = variance[0] * dK_dl_term[:,:,il]
-        print('dK_dl:', dK_dl)
-        # It doesn't work without these three lines but I don't know what is that!!!
+        # It doesn't work without these three lines but I don't know why is that!!!
         for jl in range(lengthscale.shape[0]): ##@FARIBA Why do I have to comment this out??
             l = lengthscale[jl]
             if jl != il:
                 dK_dl *= k_term[:,:,jl]
-                print ('dK_dl inside loop:', dK_dl)
         lengthscale_gradient[il] = np.sum(dL_dK * dK_dl)
     dK_dv = frb_calc_K_wo_variance(X, X, lengthscale) #the gradient wrt the variance is k.
     variance_gradient = np.sum(dL_dK * dK_dv)

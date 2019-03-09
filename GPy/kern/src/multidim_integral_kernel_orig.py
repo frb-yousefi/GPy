@@ -141,18 +141,22 @@ class Mix_Integral(Kern):
     def update_gradients_full(self, dL_dK, X, X2=None): 
         if X2 is None:  #we're finding dK_xx/dTheta
             dK_dl_term = np.zeros([X.shape[0], X.shape[0], self.lengthscale.shape[0]])
+            # print('dK_dl_term shape:', dK_dl_term.shape)
             k_term = np.zeros([X.shape[0], X.shape[0], self.lengthscale.shape[0]])
-            dK_dl = np.zeros([X.shape[0], X.shape[0], self.lengthscale.shape[0]])
-            dK_dv = np.zeros([X.shape[0], X.shape[0]])
+            # dK_dl = np.zeros([X.shape[0], X.shape[0], self.lengthscale.shape[0]])
+            # print('dK_dl.shape:', dK_dl.shape)
+            # dK_dv = np.zeros([X.shape[0], X.shape[0]])
             for il, l in enumerate(self.lengthscale):
                 idx = il * 2
                 for i, x in enumerate(X):
                     for j, x2 in enumerate(X):
-                        dK_dl_term[i, j, il] = self.dk_dl(x[-1],x2[-1],x[idx],x2[idx],x[idx+1],x2[idx+1], l)
+                        dK_dl_term[i, j, il] = self.dk_dl(x[-1], x2[-1], x[idx], x2[idx], x[idx+1], x2[idx+1], l)
                         k_term[i, j, il] = self.k(x, x2, idx, l)
             for il,l in enumerate(self.lengthscale):
                 dK_dl = self.variance[0] * dK_dl_term[:,:,il]
-                print('dK_dl:', dK_dl)
+                print ('dK_dl second shape:', dK_dl.shape)
+                print ('dK_dl_term second shape:', dK_dl_term.shape)
+                # print('dK_dl:', dK_dl)
                 # It doesn't work without these three lines but I don't know what is that!!!
                 for jl, l in enumerate(self.lengthscale): ##@FARIBA Why do I have to comment this out??
                     if jl != il:
