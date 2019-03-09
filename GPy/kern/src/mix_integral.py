@@ -7,13 +7,13 @@ from GPy.core.parameterization import Param
 from paramz.transformations import Logexp
 import math
 
-class Mix_Integral(Kern):
+class Mix_Integral_MS(Kern):
     """
       
     """
 
-    def __init__(self, input_dim, variances=None, lengthscale=None, ARD=False, active_dims=None, name='mix_integral'):
-        super(Mix_Integral, self).__init__(input_dim, active_dims, name)
+    def __init__(self, input_dim, variances=None, lengthscale=None, ARD=False, active_dims=None, name='mix_integral_MS'):
+        super(Mix_Integral_MS, self).__init__(input_dim, active_dims, name)
 
         if lengthscale is None:
             lengthscale = np.ones(1)
