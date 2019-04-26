@@ -39,6 +39,7 @@ class KernCallsViaSlicerMeta(ParametersChangedMeta):
         return super(KernCallsViaSlicerMeta, cls).__new__(cls, name, bases, dct)
 
 class _Slice_wrap(object):
+    # import pdb; pdb.set_trace()
     def __init__(self, k, X, X2=None, diag=False, ret_shape=None):
         self.k = k
         self.diag = diag
@@ -65,15 +66,21 @@ class _Slice_wrap(object):
     def __exit__(self, *a):
         self.k._sliced_X -= 1
     def handle_return_array(self, return_val):
+        # import pdb; pdb.set_trace()
+        if "GPy.kern.src.multidim_integral_kernel.Mix_Integral_" in str(type(self.k)):
+            frb_all_dims_active = self.k._all_dims_active[:-1:2]
+            # frb_all_dims_active = self.k._all_dims_active
+        else:
+            frb_all_dims_active = self.k._all_dims_active
         if self.ret:
             ret = np.zeros(self.shape)
             if len(self.shape) == 2:
-                ret[:, self.k._all_dims_active] = return_val
+                ret[:, frb_all_dims_active] = return_val
             elif len(self.shape) == 3: # derivative for X2!=None
                 if self.diag:
-                    ret.T[np.ix_(self.k._all_dims_active, self.k._all_dims_active)] = return_val.T
+                    ret.T[np.ix_(frb_all_dims_active, frb_all_dims_active)] = return_val.T
                 else:
-                    ret[:, :, self.k._all_dims_active] = return_val
+                    ret[:, :, frb_all_dims_active] = return_val
             elif len(self.shape) == 4: # second order derivative
                 ret.T[np.ix_(self.k._all_dims_active, self.k._all_dims_active)] = return_val.T
             return ret
