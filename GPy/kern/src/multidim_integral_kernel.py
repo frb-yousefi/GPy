@@ -36,14 +36,11 @@ class Mix_Integral_(Kern):
             lengthscale = np.asarray(lengthscale)
         import pdb; pdb.set_trace()
         assert len(lengthscale)==(input_dim-1)/2
-        
-
 
         self.lengthscale = Param('lengthscale', lengthscale, Logexp()) #Logexp - transforms to allow positive only values...
         self.variance = Param('variance', variance, Logexp()) #and here.
         self.link_parameters(self.variance, self.lengthscale) #this just takes a list of parameters we need to optimise.
         self.ARD = ARD
-
 
     #useful little function to help calculate the covariances.
     def g(self, z):
@@ -60,7 +57,7 @@ class Mix_Integral_(Kern):
         Note: We've not multiplied by the variance, this is done in K."""
      #######   l = lengthscale * np.sqrt(2)###TO REINSTATE
         l = lengthscale
-        return 0.5 * (l ** 2) * ( self.g((t - sprime) / l) + self.g((tprime - s) / l) - self.g((t - tprime) / l) - self.g((s - sprime) / l))
+        return (0.5 * (l ** 2) * ( self.g((t - sprime) / l) + self.g((tprime - s) / l) - self.g((t - tprime) / l) - self.g((s - sprime) / l))) #/ (np.absolute(s-t) * np.absolute(sprime-tprime))
     
     def calc_K_wo_variance(self, X, X2):
         """Calculates K without the variance term, it can be Kff, Kfu or Kuu based on the last dimension of the input"""
@@ -87,7 +84,7 @@ class Mix_Integral_(Kern):
         involve an integration, and thus there is no domain over which they're integrated, just a single value that we want."""
      #######   l = lengthscale * np.sqrt(2)###TO REINSTATE
         l = lengthscale
-        return 0.5 * np.sqrt(math.pi) * l * (math.erf((t - tprime) / l) + math.erf((tprime - s) / l))
+        return (0.5 * np.sqrt(math.pi) * l * (math.erf((t - tprime) / l) + math.erf((tprime - s) / l))) #/ (np.absolute(s-t))
 
     def k(self, x, x2, idx, l):
         # pdb.set_trace()
@@ -106,6 +103,8 @@ class Mix_Integral_(Kern):
             # TODO: talk to Mauricio if for kuu we should use the average or the first element only!!!
             #  If we should use the sum then kfu and kuf also should use the some of the dimenstions/2
             # return self.k_uu(x[idx], x2[idx], x[idx+1], x2[idx+1])
+        print('inside k x:', x)
+        print('inside k x2:', x2)
         assert False, "Invalid choice of latent/integral parameter (set the last column of X to 0s and 1s to select this)"
 
     def K(self, X, X2=None):
@@ -116,7 +115,7 @@ class Mix_Integral_(Kern):
 
     def Kdiag(self, X):
         return np.diag(self.K(X))
-    
+
     """
     Maybe we could make Kdiag much more faster, because now every single time it should calculate K and get the diag!!
     # TODO
@@ -148,9 +147,12 @@ class Mix_Integral_(Kern):
             #swap: t<->tprime (t-s)->(tprime-sprime)
         if (t_type == 1) and (tprime_type == 1): #both latent observations 
             return 2 * (t - tprime) ** 2 / (l ** 3) * np.exp(-((t - tprime) / l) ** 2)
+        print('inside dk_dl t_type:', t_type)
+        print("inside dk_dl tprime_type:", tprime_type)
         assert False, "Invalid choice of latent/integral parameter (set the last column of X to 0s and 1s to select this)"
 
     def update_gradients_full(self, dL_dK, X, X2=None): 
+        #  I am not sure which one is the correct version to use, this one or the one in Numba!!!
         # import pdb; pdb.set_trace()
         # print('X shape:', X.shape)
         if X2 is None:  # we're finding dK_xx/dTheta
@@ -182,6 +184,7 @@ class Mix_Integral_(Kern):
         # print('dK_dl shape:', dK_dl.shape)
         dK_dv = self.calc_K_wo_variance(X,X2) #the gradient wrt the variance is k.
         self.variance.gradient = np.sum(dL_dK * dK_dv)
+        # return self.lengthscale.gradient, self.variance.gradient
     
     def update_gradients_diag(self, dL_dKdiag, X):
         """
@@ -389,7 +392,7 @@ class Mix_Integral_(Kern):
 # MAKING CODE FASTER USING NUMBA
 # ------------------------------------------------------------------------------------------------------------------------------
 
-@jit(nopython=True)
+@jit(nopython=False)
 def frb_calc_K_wo_variance(X, X2, lengthscale):
     """
     Calculates K without the variance term, it can be Kff, Kfu or Kuu based on the last dimension of the input
@@ -405,7 +408,7 @@ def frb_calc_K_wo_variance(X, X2, lengthscale):
                 K_[i,j] *= k(x, x2, idx, l)
     return K_
 
-@jit(nopython=True)
+@jit(nopython=False)
 def k(x, x2, idx, l):
     if (x[-1] == 0) and (x2[-1] == 0):
         return k_ff(x[idx], x2[idx], x[idx+1], x2[idx+1], l)
@@ -415,31 +418,35 @@ def k(x, x2, idx, l):
         return k_fu(x2[idx], x[idx], x2[idx+1], l)                        
     if (x[-1] == 1) and (x2[-1] == 1):
         return k_uu(x[idx], x2[idx], l)
+    print('inside numba k x:', x)
+    print('inside numba k x2:', x2)
     assert False, "Invalid choice of latent/integral parameter (set the last column of X to 0s and 1s to select this)"
 
-@jit(nopython=True)
+@jit(nopython=False)
 def k_ff(t, tprime, s, sprime, lengthscale):
     l = lengthscale
     return 0.5 * (l**2) * (g((t - sprime) / l) + g((tprime - s) / l) - g((t - tprime) / l) - g((s - sprime) / l))
 
-@jit(nopython=True)
+@jit(nopython=False)
 def k_uu(t, tprime, lengthscale):
     l = lengthscale
     return np.exp(-((t-tprime)**2) / (l**2)) #rbf
     # return np.exp(-((t-tprime)**2) / 2 * (l**2)) #rbf
 
-@jit(nopython=True)
+@jit(nopython=False)
 def k_fu(t, tprime, s, lengthscale):
     l = lengthscale
     return 0.5 * np.sqrt(math.pi) * l * (math.erf((t - tprime) / l) + math.erf((tprime - s) / l))
 
-@jit(nopython=True)
+@jit(nopython=False)
 def g(z):
     return 1.0 * z * np.sqrt(math.pi) * math.erf(z) + np.exp(-(z**2))
 
 # @jit(nopython=False)
 # def frb_update_gradients_full_X2_none(dL_dK, X, X2, lengthscale, variance): 
-#     import pdb; pdb.set_trace()
+#     # import pdb; pdb.set_trace()
+#     if X2 is None:  # we're finding dK_xx/dTheta
+#         X2 = X
 #     dK_dl_term = np.zeros((X.shape[0], X2.shape[0], lengthscale.shape[0]))
 #     k_term = np.zeros((X.shape[0], X2.shape[0], lengthscale.shape[0]))
 #     for il in range(lengthscale.shape[0]):
@@ -448,7 +455,8 @@ def g(z):
 #         for i in range(X.shape[0]):
 #             x = X[i]
 #             for j in range(X2.shape[0]):
-#                 x2 = X[j]
+#                 ###This line was like this: x2 = X[j] I think it was a bug!!!
+#                 x2 = X2[j]
 #                 dK_dl_term[i, j, il] = dk_dl(x[-1], x2[-1], x[idx], x2[idx], x[idx+1], x2[idx+1], l)
 #                 k_term[i, j, il] = k(x, x2, idx, l)
 #     lengthscale_gradient = np.ones((lengthscale.shape[0]))
@@ -492,7 +500,7 @@ def g(z):
 #     variance_gradient = np.sum(dL_dK * dK_dv)
 #     return lengthscale_gradient, variance_gradient
 
-@jit(nopython=True)
+@jit(nopython=False)
 def dk_dl(t_type, tprime_type, t, tprime, s, sprime, l): #derivative of the kernel wrt lengthscale
     #t and tprime are the two start locations
     #s and sprime are the two end locations
@@ -508,13 +516,15 @@ def dk_dl(t_type, tprime_type, t, tprime, s, sprime, l): #derivative of the kern
         #swap: t<->tprime (t-s)->(tprime-sprime)
     if (t_type == 1) and (tprime_type == 1): #both latent observations            
         return 2 * (t - tprime) **2 / (l ** 3) * np.exp(-((t - tprime) / l) ** 2)
+    print('inside dk_dl numba t_type:', t_type)
+    print('inside dk_dl numba tprime_type:', tprime_type)
     assert False, "Invalid choice of latent/integral parameter (set the last column of X to 0s and 1s to select this)"
 
-@jit(nopython=True)    
+@jit(nopython=False)    
 def h(z):
     return 0.5 * z * np.sqrt(math.pi) * math.erf(z) + np.exp(-(z**2))
 
-@jit(nopython=True)    
+@jit(nopython=False)    
 def hp(z):
     return 0.5 * np.sqrt(math.pi) * math.erf(z) - z * np.exp(-(z**2))
 
