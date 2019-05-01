@@ -34,7 +34,7 @@ class Mix_Integral_(Kern):
             lengthscale = np.ones(1)
         else:
             lengthscale = np.asarray(lengthscale)
-        import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
         assert len(lengthscale)==(input_dim-1)/2
 
         self.lengthscale = Param('lengthscale', lengthscale, Logexp()) #Logexp - transforms to allow positive only values...
