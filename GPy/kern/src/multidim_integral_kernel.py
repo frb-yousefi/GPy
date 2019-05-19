@@ -217,7 +217,7 @@ class Mix_Integral_(Kern):
                     dK_dz_term[i, j, il] = self.dk_dz(input_type_1=x[-1], input_type_2=x2[-1], t=x[idx], tprime=x2[idx], s=x[idx+1], sprime=x2[idx+1], lengthscale=l)
                     assert int(x[-1]) == 1  # we assume the first term (X) is always Z, X2 could be either X or Z
                     k_term[i, j, il] = self.k(x, x2, idx, l)
-        print ('dK_dz_term: \n', dK_dz_term)
+        # print ('dK_dz_term: \n', dK_dz_term)
         # The result of the derivative should be
         inducing_inputs_gradient = np.ones((X.shape[0], self.lengthscale.shape[0]))
         for il,l in enumerate(self.lengthscale):
@@ -226,7 +226,7 @@ class Mix_Integral_(Kern):
             for jl, l in enumerate(self.lengthscale): 
                 if jl != il:
                     dK_dz *= k_term[:,:,jl]
-                    print('dK_dz inside \n', dK_dz)
+                    # print('dK_dz inside \n', dK_dz)
             tmp = dL_dK * dK_dz
             inducing_inputs_gradient[:, il][:, None] = np.sum(tmp, axis=1)[:,None]
         return inducing_inputs_gradient
