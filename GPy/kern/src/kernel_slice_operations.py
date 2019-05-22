@@ -67,7 +67,8 @@ class _Slice_wrap(object):
         self.k._sliced_X -= 1
     def handle_return_array(self, return_val):
         # import pdb; pdb.set_trace()
-        if "GPy.kern.src.multidim_integral_kernel.Mix_Integral_" in str(type(self.k)):
+        kernel_type_str = str(type(self.k))
+        if "GPy.kern.src.multidim_integral_kernel.Mix_Integral_" in kernel_type_str or "GPy.kern.src.multidim_integral_kernel_extend.Mix_Integral_extend" in kernel_type_str:
             frb_all_dims_active = self.k._all_dims_active[:-1:2]
             # frb_all_dims_active = self.k._all_dims_active
         else:
