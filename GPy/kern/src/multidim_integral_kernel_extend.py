@@ -11,15 +11,15 @@ from numba import jit
 # If the kernel is stationary, inherit from Stationary in
 # GPy.kern.src.stationary.py If the kernel is non-stationary,
 # inherit from Kern in GPy.kern.src.kern.py
-class Mix_Integral_(Kern):
+class Mix_Integral_extend(Kern):
     """
     Integral kernel. This kernel allows 1d histogram or binned data to be modelled.
     The outputs are the counts in each bin. The inputs (on two dimensions) are the start and end points of each bin.
     The kernel's predictions are the latent function which might have generated those binned results.
     """
  
-    def __init__(self, input_dim, variance=None, lengthscale=None, ARD=False, active_dims=None, name='mix_integral_'):
-        super(Mix_Integral_, self).__init__(input_dim, active_dims, name)
+    def __init__(self, input_dim, variance=None, lengthscale=None, ARD=False, active_dims=None, name='Mix_Integral_extend'):
+        super(Mix_Integral_extend, self).__init__(input_dim, active_dims, name)
         if lengthscale is None:
             lengthscale = np.ones(1)
         else:
@@ -46,7 +46,7 @@ class Mix_Integral_(Kern):
         Note: We've not multiplied by the variance, this is done in K."""
         #######   l = lengthscale * np.sqrt(2)###TO REINSTATE
         l = lengthscale
-        return (0.5 * (l ** 2) * ( self.g((t - sprime) / l) + self.g((tprime - s) / l) - self.g((t - tprime) / l) - self.g((s - sprime) / l))) #/ (np.absolute(s-t) * np.absolute(sprime-tprime))
+        return (0.5 * (l ** 2) * ( self.g((t - sprime) / l) + self.g((tprime - s) / l) - self.g((t - tprime) / l) - self.g((s - sprime) / l))) / (np.absolute(s-t) * np.absolute(sprime-tprime))
         # return (0.5 * ( self.g((t - sprime) / l) + self.g((tprime - s) / l) - self.g((t - tprime) / l) - self.g((s - sprime) / l))) #/ (np.absolute(s-t) * np.absolute(sprime-tprime))
     
     def calc_K_wo_variance(self, X, X2):
@@ -74,7 +74,7 @@ class Mix_Integral_(Kern):
         involve an integration, and thus there is no domain over which they're integrated, just a single value that we want."""
         #######   l = lengthscale * np.sqrt(2)###TO REINSTATE
         l = lengthscale
-        return (0.5 * np.sqrt(math.pi) * l * (math.erf((t - tprime) / l) + math.erf((tprime - s) / l))) #/ (np.absolute(s-t))
+        return (0.5 * np.sqrt(math.pi) * l * (math.erf((t - tprime) / l) + math.erf((tprime - s) / l))) / (np.absolute(s-t))
 
     def k(self, x, x2, idx, l):
         """Helper function to compute covariance in one dimension (idx) between a pair of points.
@@ -129,11 +129,11 @@ class Mix_Integral_(Kern):
         tprime_type = int(tprime_type)
         
         if (t_type == 0) and (tprime_type == 0): #both integrals
-            return l * ( self.h((t - sprime) / l) - self.h((t - tprime) / l) + self.h((tprime - s) / l) - self.h((s - sprime) / l))
+            return l * ( self.h((t - sprime) / l) - self.h((t - tprime) / l) + self.h((tprime - s) / l) - self.h((s - sprime) / l)) / (np.absolute(s-t) * np.absolute(sprime-tprime))
         if (t_type == 0) and (tprime_type == 1): #integral vs latent 
-            return self.hp((t - tprime) / l) + self.hp((tprime - s) / l)
+            return self.hp((t - tprime) / l) + self.hp((tprime - s) / l) / (np.absolute(s-t))
         if (t_type == 1) and (tprime_type == 0): #integral vs latent 
-            return self.hp((tprime - t) / l) + self.hp((t - sprime) / l)
+            return self.hp((tprime - t) / l) + self.hp((t - sprime) / l) / (np.absolute(sprime-tprime))
             #swap: t<->tprime (t-s)->(tprime-sprime)
         if (t_type == 1) and (tprime_type == 1): #both latent observations 
             return 2 * (t - tprime) ** 2 / (l ** 3) * np.exp(-((t - tprime) / l) ** 2)
@@ -152,7 +152,8 @@ class Mix_Integral_(Kern):
                     dK_dl_term[i, j, il] = self.dk_dl(x[-1], x2[-1], x[idx], x2[idx], x[idx+1], x2[idx+1], l)
                     k_term[i, j, il] = self.k(x, x2, idx, l)
         for il,l in enumerate(self.lengthscale):
-            dK_dl = self.variance[0] * dK_dl_term[:,:,il]
+            dK_dl = self.variance[0] * dK_dl_term[:,:,il]  # Adding constant for the area
+
             for jl, l in enumerate(self.lengthscale):
                 if jl != il:
                     dK_dl *= k_term[:,:,jl]
@@ -300,7 +301,7 @@ def k(x, x2, idx, l):
 @jit(nopython=True)
 def k_ff(t, tprime, s, sprime, lengthscale):
     l = lengthscale
-    return 0.5 * (l**2) * (g((t - sprime) / l) + g((tprime - s) / l) - g((t - tprime) / l) - g((s - sprime) / l)) #/ (np.absolute(s-t) * np.absolute(sprime-tprime))
+    return 0.5 * (l**2) * (g((t - sprime) / l) + g((tprime - s) / l) - g((t - tprime) / l) - g((s - sprime) / l)) / (np.absolute(s-t) * np.absolute(sprime-tprime))
     # return 0.5 * (g((t - sprime) / l) + g((tprime - s) / l) - g((t - tprime) / l) - g((s - sprime) / l))
 
 @jit(nopython=True)
@@ -312,7 +313,7 @@ def k_uu(t, tprime, lengthscale):
 @jit(nopython=True)
 def k_fu(t, tprime, s, lengthscale):
     l = lengthscale
-    return 0.5 * np.sqrt(math.pi) * l * (math.erf((t - tprime) / l) + math.erf((tprime - s) / l))
+    return 0.5 * np.sqrt(math.pi) * l * (math.erf((t - tprime) / l) + math.erf((tprime - s) / l)) / (np.absolute(s-t))
 
 @jit(nopython=True)
 def g(z):

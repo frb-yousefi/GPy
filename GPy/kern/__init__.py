@@ -50,4 +50,5 @@ from .src.multioutput_kern import MultioutputKern
 
 from .src.multidim_integral_kernel import Mix_Integral_
 from .src.multidim_integral_kernel_orig import Mix_Integral
+from .src.multidim_integral_kernel_extend import Mix_Integral_extend
 
