@@ -46,9 +46,15 @@ class Mix_Integral_extend(Kern):
         Note: We've not multiplied by the variance, this is done in K."""
         #######   l = lengthscale * np.sqrt(2)###TO REINSTATE
         l = lengthscale
-        return (0.5 * (l ** 2) * ( self.g((t - sprime) / l) + self.g((tprime - s) / l) - self.g((t - tprime) / l) - self.g((s - sprime) / l))) / (np.absolute(s-t) * np.absolute(sprime-tprime))
+        area_small = (np.absolute(s - t) * np.absolute(sprime - tprime))
+        return (0.5 * (l ** 2) * ( self.g((t - sprime) / l) + self.g((tprime - s) / l) - self.g((t - tprime) / l) - self.g((s - sprime) / l))) # / area_small
         # return (0.5 * ( self.g((t - sprime) / l) + self.g((tprime - s) / l) - self.g((t - tprime) / l) - self.g((s - sprime) / l))) #/ (np.absolute(s-t) * np.absolute(sprime-tprime))
     
+    def area_kff(self, t, tprime, s, sprime):
+        area_small = 0
+        area_small += (np.absolute(s - t) * np.absolute(sprime - tprime))
+        return area_small
+
     def calc_K_wo_variance(self, X, X2):
         """Calculates K without the variance term, it can be Kff, Kfu or Kuu based on the last dimension of the input"""
         # K_ = np.ones([X.shape[0], X2.shape[0]]) #ones now as a product occurs over each dimension
