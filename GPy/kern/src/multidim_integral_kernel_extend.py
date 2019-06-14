@@ -16,6 +16,9 @@ class Mix_Integral_extend(Kern):
     Integral kernel. This kernel allows 1d histogram or binned data to be modelled.
     The outputs are the counts in each bin. The inputs (on two dimensions) are the start and end points of each bin.
     The kernel's predictions are the latent function which might have generated those binned results.
+    This code is the normalised version of the multidim_integral_kernel.py and it normalises kff and kfu.
+    For the kff the normalisation is done by dividing the kff to the bounds. for the derivative of dkff/dl the same is done in dk/dl
+    however, for the dk/dvar because the normalisation is done in calc_K_wo_variance so we didn't do anything extra for that part.
     """
  
     def __init__(self, input_dim, variance=None, lengthscale=None, ARD=False, active_dims=None, name='Mix_Integral_extend'):
@@ -47,11 +50,16 @@ class Mix_Integral_extend(Kern):
         Note: We've not multiplied by the variance, this is done in K."""
         #######   l = lengthscale * np.sqrt(2)###TO REINSTATE
         l = lengthscale
-        print("The result of kff:", (0.5 * (l ** 2) * ( self.g((t - sprime) / l) + self.g((tprime - s) / l) - self.g((t - tprime) / l) - self.g((s - sprime) / l))))
-        print("the result after division", (0.5 * (l ** 2) * ( self.g((t - sprime) / l) + self.g((tprime - s) / l) - self.g((t - tprime) / l) - self.g((s - sprime) / l))) / (np.absolute(s-t) * np.absolute(sprime-tprime)))
-        return (0.5 * (l ** 2) * ( self.g((t - sprime) / l) + self.g((tprime - s) / l) - self.g((t - tprime) / l) - self.g((s - sprime) / l))) / (np.absolute(s-t) * np.absolute(sprime-tprime))
-        # return (0.5 * ( self.g((t - sprime) / l) + self.g((tprime - s) / l) - self.g((t - tprime) / l) - self.g((s - sprime) / l))) #/ (np.absolute(s-t) * np.absolute(sprime-tprime))
+        area_small = (np.absolute(s - t) * np.absolute(sprime - tprime))
+        # print("The result of kff:", (0.5 * (l ** 2) * ( self.g((t - sprime) / l) + self.g((tprime - s) / l) - self.g((t - tprime) / l) - self.g((s - sprime) / l))))
+        # print("the result after division", (0.5 * (l ** 2) * ( self.g((t - sprime) / l) + self.g((tprime - s) / l) - self.g((t - tprime) / l) - self.g((s - sprime) / l)))  / area_small)
+        return (0.5 * (l ** 2) * ( self.g((t - sprime) / l) + self.g((tprime - s) / l) - self.g((t - tprime) / l) - self.g((s - sprime) / l)))  / area_small
     
+    # def area_kff(self, t, tprime, s, sprime):
+    #     area_small = 0
+    #     area_small += (np.absolute(s - t) * np.absolute(sprime - tprime))
+    #     return area_small
+
     def calc_K_wo_variance(self, X, X2):
         """Calculates K without the variance term, it can be Kff, Kfu or Kuu based on the last dimension of the input"""
         # K_ = np.ones([X.shape[0], X2.shape[0]]) #ones now as a product occurs over each dimension
@@ -132,11 +140,11 @@ class Mix_Integral_extend(Kern):
         tprime_type = int(tprime_type)
         
         if (t_type == 0) and (tprime_type == 0): #both integrals
-            return l * ( self.h((t - sprime) / l) - self.h((t - tprime) / l) + self.h((tprime - s) / l) - self.h((s - sprime) / l)) / (np.absolute(s-t) * np.absolute(sprime-tprime))
+            return l * (self.h((t - sprime) / l) - self.h((t - tprime) / l) + self.h((tprime - s) / l) - self.h((s - sprime) / l)) / (np.absolute(s-t) * np.absolute(sprime-tprime))
         if (t_type == 0) and (tprime_type == 1): #integral vs latent 
-            return self.hp((t - tprime) / l) + self.hp((tprime - s) / l) / (np.absolute(s-t))
+            return (self.hp((t - tprime) / l) + self.hp((tprime - s) / l)) / (np.absolute(s-t))
         if (t_type == 1) and (tprime_type == 0): #integral vs latent 
-            return self.hp((tprime - t) / l) + self.hp((t - sprime) / l) / (np.absolute(sprime-tprime))
+            return (self.hp((tprime - t) / l) + self.hp((t - sprime) / l)) / (np.absolute(sprime-tprime))
             #swap: t<->tprime (t-s)->(tprime-sprime)
         if (t_type == 1) and (tprime_type == 1): #both latent observations 
             return 2 * (t - tprime) ** 2 / (l ** 3) * np.exp(-((t - tprime) / l) ** 2)
@@ -200,6 +208,9 @@ class Mix_Integral_extend(Kern):
     def dkfu_dz(self, t, tprime, s, lengthscale):
         l = lengthscale
         return -np.exp(-(t - tprime) ** 2 / l ** 2) + np.exp(-(tprime - s) ** 2 / l ** 2) 
+        # Should we change above to this?
+        # return -np.exp(-(t - tprime) ** 2 / l ** 2) + np.exp(-(tprime - s) ** 2 / l ** 2) / (np.absolute(s-t))
+
     
     '''
      ****** when calculating dK_dz, based on how many lengthscale we are having we will have 
@@ -304,8 +315,10 @@ def k(x, x2, idx, l):
 @jit(nopython=True)
 def k_ff(t, tprime, s, sprime, lengthscale):
     l = lengthscale
-    print("The result of kff:", (0.5 * (l ** 2) * ( self.g((t - sprime) / l) + self.g((tprime - s) / l) - self.g((t - tprime) / l) - self.g((s - sprime) / l))))
-    print("the result after division", (0.5 * (l ** 2) * ( self.g((t - sprime) / l) + self.g((tprime - s) / l) - self.g((t - tprime) / l) - self.g((s - sprime) / l))) / (np.absolute(s-t) * np.absolute(sprime-tprime)))
+    # print("s, t, sp, tp:", s, t, sprime, tprime)
+    # print("The result of kff:", (0.5 * (l ** 2) * (g((t - sprime) / l) + g((tprime - s) / l) - g((t - tprime) / l) - g((s - sprime) / l))))
+    # print("the result after division", (0.5 * (l ** 2) * (g((t - sprime) / l) + g((tprime - s) / l) - g((t - tprime) / l) - g((s - sprime) / l))) / (np.absolute(s-t) * np.absolute(sprime-tprime)))
+    # print("division:", (np.absolute(s-t) * np.absolute(sprime-tprime)))
     return 0.5 * (l**2) * (g((t - sprime) / l) + g((tprime - s) / l) - g((t - tprime) / l) - g((s - sprime) / l)) / (np.absolute(s-t) * np.absolute(sprime-tprime))
     # return 0.5 * (g((t - sprime) / l) + g((tprime - s) / l) - g((t - tprime) / l) - g((s - sprime) / l))
 
@@ -322,7 +335,6 @@ def k_fu(t, tprime, s, lengthscale):
 
 @jit(nopython=True)
 def g(z):
-    print("z", z)
     return 1.0 * z * np.sqrt(math.pi) * math.erf(z) + np.exp(-(z**2))
 
 # @jit(nopython=False)
