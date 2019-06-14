@@ -33,6 +33,7 @@ class Mix_Integral_extend(Kern):
 
     #useful little function to help calculate the covariances.
     def g(self, z):
+        print("z", z)
         return 1.0 * z * np.sqrt(math.pi) * math.erf(z) + np.exp(-(z**2))
 
     def k_ff(self, t, tprime, s, sprime, lengthscale):
@@ -46,6 +47,8 @@ class Mix_Integral_extend(Kern):
         Note: We've not multiplied by the variance, this is done in K."""
         #######   l = lengthscale * np.sqrt(2)###TO REINSTATE
         l = lengthscale
+        print("The result of kff:", (0.5 * (l ** 2) * ( self.g((t - sprime) / l) + self.g((tprime - s) / l) - self.g((t - tprime) / l) - self.g((s - sprime) / l))))
+        print("the result after division", (0.5 * (l ** 2) * ( self.g((t - sprime) / l) + self.g((tprime - s) / l) - self.g((t - tprime) / l) - self.g((s - sprime) / l))) / (np.absolute(s-t) * np.absolute(sprime-tprime)))
         return (0.5 * (l ** 2) * ( self.g((t - sprime) / l) + self.g((tprime - s) / l) - self.g((t - tprime) / l) - self.g((s - sprime) / l))) / (np.absolute(s-t) * np.absolute(sprime-tprime))
         # return (0.5 * ( self.g((t - sprime) / l) + self.g((tprime - s) / l) - self.g((t - tprime) / l) - self.g((s - sprime) / l))) #/ (np.absolute(s-t) * np.absolute(sprime-tprime))
     
@@ -301,6 +304,8 @@ def k(x, x2, idx, l):
 @jit(nopython=True)
 def k_ff(t, tprime, s, sprime, lengthscale):
     l = lengthscale
+    print("The result of kff:", (0.5 * (l ** 2) * ( self.g((t - sprime) / l) + self.g((tprime - s) / l) - self.g((t - tprime) / l) - self.g((s - sprime) / l))))
+    print("the result after division", (0.5 * (l ** 2) * ( self.g((t - sprime) / l) + self.g((tprime - s) / l) - self.g((t - tprime) / l) - self.g((s - sprime) / l))) / (np.absolute(s-t) * np.absolute(sprime-tprime)))
     return 0.5 * (l**2) * (g((t - sprime) / l) + g((tprime - s) / l) - g((t - tprime) / l) - g((s - sprime) / l)) / (np.absolute(s-t) * np.absolute(sprime-tprime))
     # return 0.5 * (g((t - sprime) / l) + g((tprime - s) / l) - g((t - tprime) / l) - g((s - sprime) / l))
 
@@ -317,6 +322,7 @@ def k_fu(t, tprime, s, lengthscale):
 
 @jit(nopython=True)
 def g(z):
+    print("z", z)
     return 1.0 * z * np.sqrt(math.pi) * math.erf(z) + np.exp(-(z**2))
 
 # @jit(nopython=False)
