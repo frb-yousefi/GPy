@@ -319,7 +319,7 @@ def k_ff(t, tprime, s, sprime, lengthscale):
     # print("The result of kff:", (0.5 * (l ** 2) * (g((t - sprime) / l) + g((tprime - s) / l) - g((t - tprime) / l) - g((s - sprime) / l))))
     # print("the result after division", (0.5 * (l ** 2) * (g((t - sprime) / l) + g((tprime - s) / l) - g((t - tprime) / l) - g((s - sprime) / l))) / (np.absolute(s-t) * np.absolute(sprime-tprime)))
     # print("division:", (np.absolute(s-t) * np.absolute(sprime-tprime)))
-    return 0.5 * (l**2) * (g((t - sprime) / l) + g((tprime - s) / l) - g((t - tprime) / l) - g((s - sprime) / l)) / (np.absolute(s-t) * np.absolute(sprime-tprime))
+    return (0.5 * (l ** 2) * (g((t - sprime) / l) + g((tprime - s) / l) - g((t - tprime) / l) - g((s - sprime) / l))) / (np.absolute(s-t) * np.absolute(sprime-tprime))
     # return 0.5 * (g((t - sprime) / l) + g((tprime - s) / l) - g((t - tprime) / l) - g((s - sprime) / l))
 
 @jit(nopython=True)
@@ -331,7 +331,7 @@ def k_uu(t, tprime, lengthscale):
 @jit(nopython=True)
 def k_fu(t, tprime, s, lengthscale):
     l = lengthscale
-    return 0.5 * np.sqrt(math.pi) * l * (math.erf((t - tprime) / l) + math.erf((tprime - s) / l)) / (np.absolute(s-t))
+    return (0.5 * np.sqrt(math.pi) * l * (math.erf((t - tprime) / l) + math.erf((tprime - s) / l))) / (np.absolute(s-t))
 
 @jit(nopython=True)
 def g(z):
