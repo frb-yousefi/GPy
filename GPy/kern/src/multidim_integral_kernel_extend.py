@@ -36,7 +36,7 @@ class Mix_Integral_extend(Kern):
 
     #useful little function to help calculate the covariances.
     def g(self, z):
-        print("z", z)
+        # print("z", z)
         return 1.0 * z * np.sqrt(math.pi) * math.erf(z) + np.exp(-(z**2))
 
     def k_ff(self, t, tprime, s, sprime, lengthscale):
