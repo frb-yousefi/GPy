@@ -1,4 +1,4 @@
-# Written by Mike Smith and modified and extended by Fariba.
+# Written by Mike Smith and modified and extended by Fariba Yousefi.
 
 from __future__ import division
 import numpy as np
@@ -182,101 +182,10 @@ class Mix_Integral_extend(Kern):
         """
         dL_dK_full = np.eye(X.shape[0], X.shape[0]) * dL_dKdiag
         self.update_gradients_full(dL_dK_full, X)
-
-    def dk_dz(self, input_type_1, input_type_2, t, tprime, s, sprime, lengthscale):
-        # here t stands for z and tprime stands for z' (latent inputs)
-        input_type_1 = int(input_type_1)
-        input_type_2 = int(input_type_2)
-        if (input_type_1 == 0) and (input_type_2 == 1):
-            return self.dkfu_dz(t, tprime, s, lengthscale) 
-        # TODO: Write the gradient for the below combination--- check if it is correct!!!
-        if (input_type_1 == 1) and (input_type_2 == 0):
-            return self.dkfu_dz(tprime, t, sprime, lengthscale) 
-        if (input_type_1 == 1) and (input_type_2 == 1):
-            return self.dkuu_dz(t, tprime, s, sprime, lengthscale) 
-        if (input_type_1 == 0) and (input_type_2 == 0):
-            #  It is derivative of kff/dz which is zero
-            return 0 
-        
-        raise Exception('KFU should have X and Z and KUU should have Z and Z!')
     
-    def dkuu_dz(self, t, tprime, s, sprime, lengthscale):
-        l = lengthscale
-        return -2 * (t - tprime) / (l ** 2) * np.exp(-(t - tprime) ** 2 / l ** 2)
-        # return -(t - tprime) / l * np.exp(-0.5 * (t - tprime) ** 2 / l ** 2)
-
-    def dkfu_dz(self, t, tprime, s, lengthscale):
-        l = lengthscale
-        return -np.exp(-(t - tprime) ** 2 / l ** 2) + np.exp(-(tprime - s) ** 2 / l ** 2) 
-        # Should we change above to this?
-        # return -np.exp(-(t - tprime) ** 2 / l ** 2) + np.exp(-(tprime - s) ** 2 / l ** 2) / (np.absolute(s-t))
-
-    
-    '''
-     ****** when calculating dK_dz, based on how many lengthscale we are having we will have 
-     different K for every dimension. So for example if l has 3 dimensions then we have 
-     K = K1*K2*K3 now for the dK/dz2 we will have K1*dK2/dz2*K3 
-    '''
     def gradients_X(self, dL_dK, X, X2=None):
-        #     """
-        #     .. math::
-        #         \\frac{\partial L}{\partial X} = \\frac{\partial L}{\partial K}\\frac{\partial K}{\partial X}
-        #     """
-        if X2 is None:
-            X2 = X.copy()
-        dK_dz_term = np.zeros((X.shape[0], X2.shape[0], self.lengthscale.shape[0]))
-        k_term = np.zeros((X.shape[0], X2.shape[0], self.lengthscale.shape[0]))
-        for il, l in enumerate(self.lengthscale):
-            idx = il * 2
-            for i, x in enumerate(X):
-                for j, x2 in enumerate(X2):
-                    dK_dz_term[i, j, il] = self.dk_dz(input_type_1=x[-1], input_type_2=x2[-1], t=x[idx], tprime=x2[idx], s=x[idx+1], sprime=x2[idx+1], lengthscale=l)
-                    assert int(x[-1]) == 1  # we assume the first term (X) is always Z, X2 could be either X or Z
-                    k_term[i, j, il] = self.k(x, x2, idx, l)
-        # print ('dK_dz_term: \n', dK_dz_term)
-        # The result of the derivative should be
-        inducing_inputs_gradient = np.ones((X.shape[0], self.lengthscale.shape[0]))
-        for il,l in enumerate(self.lengthscale):
-            dK_dz = self.variance[0] * dK_dz_term[:,:,il]
-            # print('dK_dz:\n', dK_dz)
-            for jl, l in enumerate(self.lengthscale): 
-                if jl != il:
-                    dK_dz *= k_term[:,:,jl]
-                    # print('dK_dz inside \n', dK_dz)
-            tmp = dL_dK * dK_dz
-            inducing_inputs_gradient[:, il][:, None] = np.sum(tmp, axis=1)[:,None]
-        return inducing_inputs_gradient
+        pass
         
-    def gradients_X_orig(self, dL_dK, X, X2=None):
-        """
-        .. math::
-            \\frac{\partial L}{\partial X} = \\frac{\partial L}{\partial K}\\frac{\partial K}{\partial X}
-        """
-        # We don't use this because it expects X2 not to be None!
-        if X2 is None:
-            dK_dz_term = np.zeros((X.shape[0], X.shape[0], self.lengthscale.shape[0]))
-            k_term = np.zeros((X.shape[0], X.shape[0], self.lengthscale.shape[0]))
-            for il, l in enumerate(self.lengthscale):
-                idx = il * 2
-                for i, x in enumerate(X):
-                    for j, x2 in enumerate(X):
-                        dK_dz_term[i, j, il] = self.dk_dz(x[-1], x2[-1], x[idx], x2[idx], x[idx+1], x2[idx+1], l)
-                        k_term[i, j, il] = self.k(x, x2, idx, l)
-            # The result of the derivative should be 
-            inducing_inputs_gradient = np.ones((X.shape[0], self.lengthscale.shape[0]))
-            for il,l in enumerate(self.lengthscale):
-                dK_dz = self.variance[0] * dK_dz_term[:,:,il]
-            #     # It doesn't work without these three lines but I don't know what is that!!!
-                for jl, l in enumerate(self.lengthscale): ##@FARIBA Why do I have to comment this out??
-                    if jl != il:
-                        dK_dz *= k_term[:,:,jl]
-                tmp = dL_dK * dK_dz
-                inducing_inputs_gradient[:, il][:, None] = np.sum(tmp, axis=1)[:,None]
-                # inducing_inputs_gradient[il] = np.sum(dL_dK * dK_dz)
-            return inducing_inputs_gradient
-        else:
-            raise NotImplementedError('Currently this function only handles finding the gradient of a single vector of inputs (X) not a pair of vectors (X and X2)")')
-
 # ------------------------------------------------------------------------------------------------------------------------------
 # MAKING CODE FASTER USING NUMBA
 # ------------------------------------------------------------------------------------------------------------------------------
@@ -315,18 +224,12 @@ def k(x, x2, idx, l):
 @jit(nopython=True)
 def k_ff(t, tprime, s, sprime, lengthscale):
     l = lengthscale
-    # print("s, t, sp, tp:", s, t, sprime, tprime)
-    # print("The result of kff:", (0.5 * (l ** 2) * (g((t - sprime) / l) + g((tprime - s) / l) - g((t - tprime) / l) - g((s - sprime) / l))))
-    # print("the result after division", (0.5 * (l ** 2) * (g((t - sprime) / l) + g((tprime - s) / l) - g((t - tprime) / l) - g((s - sprime) / l))) / (np.absolute(s-t) * np.absolute(sprime-tprime)))
-    # print("division:", (np.absolute(s-t) * np.absolute(sprime-tprime)))
     return (0.5 * (l ** 2) * (g((t - sprime) / l) + g((tprime - s) / l) - g((t - tprime) / l) - g((s - sprime) / l))) / (np.absolute(s-t) * np.absolute(sprime-tprime))
-    # return 0.5 * (g((t - sprime) / l) + g((tprime - s) / l) - g((t - tprime) / l) - g((s - sprime) / l))
 
 @jit(nopython=True)
 def k_uu(t, tprime, lengthscale):
     l = lengthscale
     return np.exp(-((t-tprime)**2) / (l**2)) #rbf
-    # return np.exp(-((t-tprime)**2) / 2 * (l**2)) #rbf
 
 @jit(nopython=True)
 def k_fu(t, tprime, s, lengthscale):
@@ -337,68 +240,3 @@ def k_fu(t, tprime, s, lengthscale):
 def g(z):
     return 1.0 * z * np.sqrt(math.pi) * math.erf(z) + np.exp(-(z**2))
 
-# @jit(nopython=False)
-# def frb_update_gradients_full_X2_none(dL_dK, X, X2, lengthscale, variance): 
-#     if X2 is None:  # we're finding dK_xx/dTheta
-#         X2 = X
-#     dK_dl_term = np.zeros((X.shape[0], X2.shape[0], lengthscale.shape[0]))
-#     k_term = np.zeros((X.shape[0], X2.shape[0], lengthscale.shape[0]))
-#     for il in range(lengthscale.shape[0]):
-#         l = lengthscale[il]
-#         idx = int(il * 2)
-#         for i in range(X.shape[0]):
-#             x = X[i]
-#             for j in range(X2.shape[0]):
-#                 ###This line was like this: x2 = X[j] I think it was a bug!!!
-#                 x2 = X2[j]
-#                 dK_dl_term[i, j, il] = dk_dl(x[-1], x2[-1], x[idx], x2[idx], x[idx+1], x2[idx+1], l)
-#                 k_term[i, j, il] = k(x, x2, idx, l)
-#     lengthscale_gradient = np.ones((lengthscale.shape[0]))
-#     for il in range(lengthscale.shape[0]):
-#         l = lengthscale[il]
-#         dK_dl = variance[0] * dK_dl_term[:,:,il]
-#         # It doesn't work without these three lines but I don't know why is that!!!
-#         for jl in range(lengthscale.shape[0]): ##@FARIBA Why do I have to comment this out??
-#             l = lengthscale[jl]
-#             if jl != il:
-#                 dK_dl *= k_term[:,:,jl]
-#         lengthscale_gradient[il] = np.sum(dL_dK * dK_dl)
-#     dK_dv = frb_calc_K_wo_variance(X, X2, lengthscale) #the gradient wrt the variance is k.
-#     variance_gradient = np.sum(dL_dK * dK_dv)
-#     return lengthscale_gradient, variance_gradient
-
-# NOT USED, kept for refernece only
-# def update_gradients_full_orig(self, dL_dK, X, X2=None): 
-#     if X2 is None:  #we're finding dK_xx/dTheta
-#         lengthscale_gradient, variance_gradient = frb_update_gradients_full_X2_none(dL_dK, X, X2, np.array(self.lengthscale), np.array(self.variance))
-#         for il,_ in enumerate(self.lengthscale):
-#             self.lengthscale.gradient[il] = lengthscale_gradient[il]
-#         self.variance.gradient = variance_gradient
-#         # dK_dl_term = np.zeros([X.shape[0], X.shape[0], self.lengthscale.shape[0]])
-#         # k_term = np.zeros([X.shape[0], X.shape[0], self.lengthscale.shape[0]])
-#         # dK_dl = np.zeros([X.shape[0], X.shape[0], self.lengthscale.shape[0]])
-#         # dK_dv = np.zeros([X.shape[0], X.shape[0]])
-#         # for il, l in enumerate(self.lengthscale):
-#         #     idx = il * 2
-#         #     for i, x in enumerate(X):
-#         #         for j, x2 in enumerate(X):
-#         #             dK_dl_term[i, j, il] = self.dk_dl(x[-1],x2[-1],x[idx],x2[idx],x[idx+1],x2[idx+1], l)
-#         #             k_term[i, j, il] = self.k(x, x2, idx, l)
-#         #  ****** when calculating dK_dl, based on how many lengthscale we are having we will have 
-#         #  different K for every dimension. So for example if l has 3 dimensions then we have 
-#         #  K = K1*K2*K3 now for the dK/dl2 we will have K1*dK2/dl2*K3 
-#         # for il,l in enumerate(self.lengthscale):
-#         #     dK_dl = self.variance[0] * dK_dl_term[:,:,il]
-#         #     print('dK_dl:', dK_dl)
-#         #     # It doesn't work without these three lines but I don't know what is that!!!
-#         #     for jl, l in enumerate(self.lengthscale): ##@FARIBA Why do I have to comment this out??
-#         #         if jl != il:
-#         #             dK_dl *= k_term[:,:,jl]
-#         #             print('dK_dl inside!! what is this?', dK_dl)
-#         #     self.lengthscale.gradient[il] = np.sum(dL_dK * dK_dl)
-#         # TODO!!!!
-#         # TODO: Why calc_K_wo_variance(X,X) is not calc_K_wo_variance(X,X2)????
-#         # dK_dv = self.calc_K_wo_variance(X,X) #the gradient wrt the variance is k.
-#         # self.variance.gradient = np.sum(dL_dK * dK_dv)
-#     else:     #we're finding dK_xf/Dtheta
-#         raise NotImplementedError("Currently this function only handles finding the gradient of a single vector of inputs (X) not a pair of vectors (X and X2)")
